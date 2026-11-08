@@ -73,3 +73,4 @@ A newly retrained candidate model is **promoted to production** if and only if i
 
 ### 4.3 Rollback Mechanism
 Previous production model artifacts are archived to `backend/ml/archive/models/` with timestamped checksums. If production telemetry detects anomaly spikes, `ContinuousLearningService.rollback_model()` immediately restores the prior champion artifact without downtime.
+

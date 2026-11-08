@@ -97,3 +97,4 @@ The engine queries historical scan records from Supabase (`get_scans_by_domain`)
 - **Historically Malicious**: $\ge 50\%$ of historical scans flagged as HIGH or CRITICAL risk.
 - **Behavioral Drift (Compromised Site Alert)**: If a historically clean domain suddenly triggers active phishing indicators or malware signatures, the engine issues an urgent warning:
   > *"Behavioral Shift Detected: Domain has a previously clean scan history, but current scan displays active phishing indicators. Investigating potential account takeover or new malicious campaign."*
+

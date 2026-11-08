@@ -8,7 +8,7 @@ Prevents false brand trust on subdomains (e.g. google.example.com != google.com)
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Multi-part public suffixes commonly encountered
 _MULTI_PART_TLDS = {
@@ -164,3 +164,4 @@ def check_brand_impersonation(hostname: str, registered_domain: str) -> Tuple[bo
                 )
 
     return False, None, "No brand impersonation detected."
+

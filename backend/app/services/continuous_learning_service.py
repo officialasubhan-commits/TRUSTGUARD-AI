@@ -245,3 +245,4 @@ class ContinuousLearningService:
         shutil.copy2(latest_archive, MODEL_DIR / "phishing_rf_v1.joblib")
         logger.info("Rolled back production model from %s", latest_archive)
         return True, f"Successfully restored model from archive: {latest_archive.name}"
+

@@ -39,3 +39,4 @@ async def evaluate_domain_reputation(
 ) -> DomainReputationResult:
     logger.info("Domain reputation evaluation requested for domain='%s'", domain)
     return await reputation_service.evaluate_domain(domain)
+

@@ -231,8 +231,6 @@ async def get_current_admin(
     payload = decode_admin_access_token(token)
     
     admin_id_str = payload.get("sub")
-    username = payload.get("username")
-    role = payload.get("role", "super_admin")
     
     try:
         admin_id = uuid.UUID(admin_id_str)

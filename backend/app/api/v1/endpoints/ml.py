@@ -114,3 +114,4 @@ async def get_model_telemetry(
         "metadata": ml_service._metadata,
         "metrics": ml_service._metrics,
     }
+

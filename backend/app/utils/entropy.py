@@ -85,3 +85,4 @@ def detect_homograph_and_lookalikes(hostname: str) -> Tuple[bool, str]:
         return True, "NON_ASCII_HOMOGRAPH"
 
     return False, "None"
+

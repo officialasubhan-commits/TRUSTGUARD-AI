@@ -284,3 +284,4 @@ class DomainReputationService:
             base_unfamiliar -= 15
 
         return "NEUTRAL_UNFAMILIAR", max(25, base_unfamiliar), "HIGH"
+

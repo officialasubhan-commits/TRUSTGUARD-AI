@@ -242,7 +242,6 @@ class AdminService:
             "DEFACEMENT": 0,
             "SCAM": 0,
         }
-        mod_counts: Dict[str, Dict[str, int]] = {}
 
         if cli is not None:
             try:

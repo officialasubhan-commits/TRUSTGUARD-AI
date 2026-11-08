@@ -133,3 +133,4 @@ The Domain Reputation and SSL Validation services enforce strict asynchronous DN
 1. Every DNS lookup runs within a bounded timeout ($2.5\text{s}$) inside a non-blocking threadpool.
 2. Every returned IP address is checked against `ipaddress.ip_address(ip).is_private` and `is_loopback`.
 3. Requests targeting internal service ports or cloud credentials endpoints are aborted prior to socket connection, preventing internal network exposure.
+

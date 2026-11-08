@@ -983,7 +983,7 @@ class ScanRepository:
                         .execute()
                     )
 
-                res = await asyncio.wait_for(asyncio.to_thread(_query), timeout=1.5)
+                res = await asyncio.to_thread(_query)
                 if res and res.data:
                     return [ScanHistoryResponse.model_validate(r) for r in res.data]
             except Exception as e:

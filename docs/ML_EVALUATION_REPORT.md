@@ -77,3 +77,4 @@ The table below details the top predictive features identified by the Gradient B
 | 8 | `url_entropy` | 0.71% | 98.09% | Information density of overall target URL string |
 | 9 | `url_length` | 0.47% | 98.56% | Total URL character length |
 | 10 | `subdomain_count` | 0.32% | 98.88% | Subdomain nesting depth |
+
