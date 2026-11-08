@@ -1,0 +1,70 @@
+/**
+ * TrustGuard AI — Design System Design Tokens
+ * Premium Monochromatic Digital Minimalism
+ */
+
+:root {
+  /* Surface & Canvas Colors */
+  --bg-primary: #080808;
+  --bg-secondary: #101010;
+  --bg-surface: #141414;
+  --bg-surface-elevated: #181818;
+  --bg-surface-hover: #1C1C1C;
+  --bg-surface-active: #222222;
+
+  /* Typography Colors */
+  --text-primary: #F5F5F5;
+  --text-secondary: #A1A1A1;
+  --text-muted: #666666;
+  --text-subtle: #404040;
+  --text-white: #FFFFFF;
+
+  /* Structural Borders */
+  --border-subtle: #292929;
+  --border-strong: #383838;
+  --border-active: #525252;
+  --border-focus: #F5F5F5;
+
+  /* Security Status Tokens (Restrained, Purposeful) */
+  --status-safe-text: #4ADE80;
+  --status-safe-bg: #052E16;
+  --status-safe-border: #166534;
+
+  --status-suspicious-text: #FBBF24;
+  --status-suspicious-bg: #451A03;
+  --status-suspicious-border: #92400E;
+
+  --status-malicious-text: #F87171;
+  --status-malicious-bg: #450A0A;
+  --status-malicious-border: #991B1B;
+
+  --status-unknown-text: #A1A1A1;
+  --status-unknown-bg: #141414;
+  --status-unknown-border: #383838;
+
+  /* Spacing Scale */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+  --space-20: 5rem;    /* 80px */
+  --space-24: 6rem;    /* 96px */
+
+  /* Maximum Content Layout Widths */
+  --container-sm: 640px;
+  --container-md: 896px;
+  --container-lg: 1152px;
+  --container-xl: 1344px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+

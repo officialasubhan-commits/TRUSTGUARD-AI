@@ -1,0 +1,3 @@
+// Static asset exports
+export {};
+
