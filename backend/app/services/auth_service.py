@@ -79,20 +79,36 @@ class AuthService:
         # 1. LIVE SUPABASE AUTH INTEGRATION
         if self._client is not None and settings.supabase_configured:
             try:
-                sign_up_res = self._client.auth.sign_up(
-                    {
-                        "email": email,
-                        "password": reg_in.password,
-                        "options": {
-                            "data": {
+                sb_user = None
+                admin_cli = connection.get_supabase_service_client()
+                if admin_cli is not None and hasattr(admin_cli, "auth") and hasattr(admin_cli.auth, "admin"):
+                    created_res = admin_cli.auth.admin.create_user(
+                        {
+                            "email": email,
+                            "password": reg_in.password,
+                            "email_confirm": True,
+                            "user_metadata": {
                                 "full_name": reg_in.full_name,
-                            }
-                        },
-                    }
-                )
-                sb_user = sign_up_res.user
-                if not sb_user:
-                    raise UserAlreadyExistsError("Unable to create user account.")
+                            },
+                        }
+                    )
+                    sb_user = getattr(created_res, "user", created_res)
+                else:
+                    sign_up_res = self._client.auth.sign_up(
+                        {
+                            "email": email,
+                            "password": reg_in.password,
+                            "options": {
+                                "data": {
+                                    "full_name": reg_in.full_name,
+                                }
+                            },
+                        }
+                    )
+                    sb_user = sign_up_res.user
+
+                if not sb_user or (hasattr(sb_user, "identities") and sb_user.identities is not None and len(sb_user.identities) == 0):
+                    raise UserAlreadyExistsError("A user with this email address already exists.")
 
                 user_id = uuid.UUID(sb_user.id)
                 # Create profile record in public.users
@@ -107,12 +123,36 @@ class AuthService:
                 except DatabaseError as e:
                     logger.warning("Profile creation error (may be handled by trigger): %s", e)
 
-                session = sign_up_res.session
-                access_token = (
-                    session.access_token if session else _generate_mock_jwt(user_id, email)
-                )
-                refresh_token = session.refresh_token if session else str(uuid.uuid4())
-                expires_in = session.expires_in if session else 3600
+                # Acquire immediate session tokens via password login since user is confirmed
+                session = None
+                try:
+                    sign_in_res = self._client.auth.sign_in_with_password(
+                        {
+                            "email": email,
+                            "password": reg_in.password,
+                        }
+                    )
+                    session = sign_in_res.session
+                except Exception as sign_in_err:
+                    logger.warning("Auto sign-in after registration warning: %s", sign_in_err)
+
+                if session and session.access_token:
+                    access_token = session.access_token
+                    refresh_token = session.refresh_token
+                    expires_in = session.expires_in or 3600
+                else:
+                    access_token = _generate_mock_jwt(user_id, email)
+                    refresh_token = f"refresh-{uuid.uuid4()}"
+                    expires_in = 3600
+                    _mock_refresh_tokens[refresh_token] = email
+                    _mock_auth_users[email] = {
+                        "id": user_id,
+                        "email": email,
+                        "full_name": reg_in.full_name,
+                        "password": reg_in.password,
+                        "role": "user",
+                        "created_at": datetime.now(timezone.utc),
+                    }
 
                 return AuthTokenResponse(
                     access_token=access_token,
@@ -130,9 +170,9 @@ class AuthService:
                 raise
             except Exception as e:
                 err_str = str(e).lower()
-                if "already registered" in err_str or "duplicate" in err_str:
+                if any(k in err_str for k in ("already registered", "already been registered", "duplicate", "user_already_exists")):
                     raise UserAlreadyExistsError("A user with this email address already exists.")
-                logger.error("Supabase sign_up error: %s", e)
+                logger.error("Supabase user creation error: %s", e)
                 raise InvalidCredentialsError(f"Registration failed: {e}")
 
         # 2. ISOLATED TEST / OFFLINE MODE
@@ -215,12 +255,59 @@ class AuthService:
                         created_at=datetime.now(timezone.utc),
                     ),
                 )
-            except (InvalidCredentialsError, EmailNotConfirmedError, RateLimitExceededError):
+            except (InvalidCredentialsError, RateLimitExceededError):
                 raise
             except Exception as e:
                 err_str = str(e).lower()
                 if "email not confirmed" in err_str or "email_not_confirmed" in err_str:
+                    # Attempt auto-confirm through admin client and retry login
+                    try:
+                        admin_cli = connection.get_supabase_service_client()
+                        if admin_cli is not None and hasattr(admin_cli, "auth") and hasattr(admin_cli.auth, "admin"):
+                            target_id = None
+                            user_prof = await self._user_repo.get_user_by_email(email)
+                            if user_prof:
+                                target_id = str(user_prof.id)
+                            else:
+                                list_res = admin_cli.auth.admin.list_users()
+                                users_arr = getattr(list_res, "users", list_res if isinstance(list_res, list) else [])
+                                for u in users_arr:
+                                    if getattr(u, "email", "").lower() == email:
+                                        target_id = getattr(u, "id", None)
+                                        break
+                            if target_id:
+                                admin_cli.auth.admin.update_user_by_id(target_id, {"email_confirm": True})
+                                retry_res = self._client.auth.sign_in_with_password(
+                                    {
+                                        "email": email,
+                                        "password": login_in.password,
+                                    }
+                                )
+                                session = retry_res.session
+                                sb_user = retry_res.user
+                                if session and sb_user:
+                                    user_id = uuid.UUID(sb_user.id)
+                                    full_name = (
+                                        sb_user.user_metadata.get("full_name")
+                                        if sb_user.user_metadata
+                                        else None
+                                    )
+                                    return AuthTokenResponse(
+                                        access_token=session.access_token,
+                                        refresh_token=session.refresh_token,
+                                        expires_in=session.expires_in or 3600,
+                                        user=AuthUserResponse(
+                                            id=user_id,
+                                            email=email,
+                                            full_name=full_name,
+                                            role="user",
+                                            created_at=datetime.now(timezone.utc),
+                                        ),
+                                    )
+                    except Exception as rescue_err:
+                        logger.warning("Unconfirmed email rescue login failed: %s", rescue_err)
                     raise EmailNotConfirmedError("Email verification required before signing in.")
+
                 if "rate limit" in err_str or "too many requests" in err_str:
                     raise RateLimitExceededError("Too many login attempts. Please wait a few moments before trying again.")
                 logger.warning("Supabase login failure for user %s: %s", email, e)
@@ -281,8 +368,12 @@ class AuthService:
                     ),
                 )
             except Exception as e:
-                logger.warning("Supabase refresh error: %s", e)
-                raise InvalidTokenError("Invalid or expired refresh token.")
+                # If this was a fallback/mock refresh token, allow isolated fallback
+                if refresh_in.refresh_token in _mock_refresh_tokens:
+                    pass
+                else:
+                    logger.warning("Supabase refresh error: %s", e)
+                    raise InvalidTokenError("Invalid or expired refresh token.")
 
         # 2. ISOLATED TEST MODE
         email = _mock_refresh_tokens.get(refresh_in.refresh_token)

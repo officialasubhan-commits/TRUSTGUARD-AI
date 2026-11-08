@@ -103,13 +103,37 @@ class UserRepository:
             return UserProfileResponse.model_validate(data)
         return None
 
+    async def get_user_by_email(self, email: str) -> Optional[UserProfileResponse]:
+        """
+        Retrieves user profile by email address.
+        """
+        normalized_email = email.lower().strip()
+        if self._client is not None:
+            try:
+                res = self._client.table("users").select("*").eq("email", normalized_email).execute()
+                if res.data:
+                    data = res.data[0]
+                    uid = uuid.UUID(data["id"])
+                    if "threat_digest_enabled" not in data or data.get("threat_digest_enabled") is None:
+                        data["threat_digest_enabled"] = _threat_digest_fallback.get(uid, False)
+                    return UserProfileResponse.model_validate(data)
+                return None
+            except Exception as e:
+                logger.error("Supabase select user by email error: %s", e)
+                raise DatabaseError(f"Database error fetching user by email: {e}")
+
+        for uid, user_data in _mock_users_store.items():
+            if user_data.get("email", "").lower().strip() == normalized_email:
+                return UserProfileResponse.model_validate(user_data)
+        return None
+
     async def update_user_profile(
         self, user_id: uuid.UUID, update_in: UserUpdate
     ) -> Optional[UserProfileResponse]:
         """
         Updates profile details (display name, avatar, active status, threat_digest_enabled).
         """
-        updates = {k: v for k, v in update_in.model_dump(exclude_unset=True).items()}
+        updates = {k: v for k, v in update_in.model_dump(exclude_unset=True).items() if v is not None}
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         threat_digest_val = updates.get("threat_digest_enabled")
 
@@ -130,23 +154,24 @@ class UserRepository:
                 return None
             except Exception as e:
                 err_str = str(e)
-                if ("threat_digest_enabled" in err_str or "PGRST204" in err_str) and threat_digest_val is not None:
-                    logger.warning("Supabase schema cache lacks 'threat_digest_enabled', storing in resilient cache: %s", e)
-                    _threat_digest_fallback[user_id] = threat_digest_val
+                if "threat_digest_enabled" in err_str or "PGRST204" in err_str:
+                    logger.warning("Supabase schema lacks 'threat_digest_enabled', storing in resilient cache: %s", e)
+                    if threat_digest_val is not None:
+                        _threat_digest_fallback[user_id] = threat_digest_val
                     updates_compat = {k: v for k, v in updates.items() if k != "threat_digest_enabled"}
-                    if len(updates_compat) > 1:  # Contains fields other than updated_at
-                        try:
-                            res = self._client.table("users").update(updates_compat).eq("id", str(user_id)).execute()
-                            if res.data:
-                                data = res.data[0]
-                                data["threat_digest_enabled"] = threat_digest_val
-                                return UserProfileResponse.model_validate(data)
-                        except Exception as update_err:
-                            logger.error("Supabase update fallback error: %s", update_err)
-                            raise DatabaseError(f"Database error updating user: {update_err}")
+                    try:
+                        res = self._client.table("users").update(updates_compat).eq("id", str(user_id)).execute()
+                        if res.data:
+                            data = res.data[0]
+                            data["threat_digest_enabled"] = _threat_digest_fallback.get(user_id, False)
+                            return UserProfileResponse.model_validate(data)
+                    except Exception as update_err:
+                        logger.error("Supabase update fallback error: %s", update_err)
+                        raise DatabaseError(f"Database error updating user: {update_err}")
                     profile = await self.get_user_profile(user_id)
                     if profile:
-                        profile.threat_digest_enabled = threat_digest_val
+                        if threat_digest_val is not None:
+                            profile.threat_digest_enabled = threat_digest_val
                         return profile
                     return None
                 logger.error("Supabase update user error: %s", e)
