@@ -87,7 +87,7 @@ TrustGuard AI transforms web threat analysis from opaque guesswork into an expla
 
 ## 6. System Architecture
 
-flowchart TD
+    flowchart TD
     subgraph Client ["Frontend Client (React + Vite)"]
         UserBrowser["Public User Browser"]
         AdminBrowser["Admin Console"]
