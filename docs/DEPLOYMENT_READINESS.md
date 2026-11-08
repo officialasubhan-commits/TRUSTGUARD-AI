@@ -21,7 +21,7 @@
 ### 1.2 Frontend Environment Variables Checklist (Vercel)
 | Variable | Value / Description | Sensitive? |
 | :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | `https://trustguard-ai-backend.onrender.com/api/v1` *(replace with actual Render service URL)* | No (Public) |
+| `VITE_API_BASE_URL` | `https://trustguard-ai-a154.onrender.com/api/v1` | No (Public) |
 | `VITE_GOOGLE_CLIENT_ID` | `your-google-client-id.apps.googleusercontent.com` | No (Public Client ID) |
 
 > [!CAUTION]

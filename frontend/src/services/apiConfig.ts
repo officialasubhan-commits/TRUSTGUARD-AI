@@ -1,4 +1,4 @@
-const DEFAULT_PROD_API_URL = 'https://trustguard-ai-backend.onrender.com/api/v1';
+const DEFAULT_PROD_API_URL = 'https://trustguard-ai-a154.onrender.com/api/v1';
 const DEFAULT_DEV_API_URL = 'http://localhost:8000/api/v1';
 
 function resolveApiBaseUrl(): string {
