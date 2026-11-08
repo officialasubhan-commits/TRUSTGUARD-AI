@@ -253,3 +253,4 @@ export const UserCommunitySubmissions: React.FC<UserCommunitySubmissionsProps> =
     </Card>
   );
 };
+

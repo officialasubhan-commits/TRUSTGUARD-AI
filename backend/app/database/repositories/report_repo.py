@@ -284,18 +284,27 @@ class ReportRepository:
                 # Decorate with user confirmation status if authenticated
                 if user_id and items:
                     rep_ids = [str(r.get("id")) for r in items if r.get("id")]
-                    try:
-                        conf_res = (
-                            cli.table("community_confirmations")
-                            .select("report_id")
-                            .eq("user_id", str(user_id))
-                            .in_("report_id", rep_ids)
-                            .execute()
-                        )
-                        confirmed_set = {str(c.get("report_id")) for c in (conf_res.data or [])}
-                        for r in items:
-                            r["user_confirmed"] = str(r.get("id")) in confirmed_set
-                    except Exception:
+                    if connection.is_table_available("community_confirmations"):
+                        try:
+                            conf_res = (
+                                cli.table("community_confirmations")
+                                .select("report_id")
+                                .eq("user_id", str(user_id))
+                                .in_("report_id", rep_ids)
+                                .execute()
+                            )
+                            confirmed_set = {str(c.get("report_id")) for c in (conf_res.data or [])}
+                            for r in items:
+                                r["user_confirmed"] = str(r.get("id")) in confirmed_set
+                        except Exception:
+                            confirmed_set = {
+                                k.split(":")[0]
+                                for k in _mock_confirmations_store.keys()
+                                if k.endswith(f":{user_id}")
+                            }
+                            for r in items:
+                                r["user_confirmed"] = str(r.get("id")) in confirmed_set
+                    else:
                         confirmed_set = {
                             k.split(":")[0]
                             for k in _mock_confirmations_store.keys()
@@ -404,11 +413,18 @@ class ReportRepository:
                 resolved = resolved_res.count if resolved_res.count is not None else len(resolved_res.data or [])
 
                 conf_count = 0
-                try:
-                    conf_res = cli.table("community_confirmations").select("id", count="exact").execute()
-                    conf_count = conf_res.count if conf_res.count is not None else len(conf_res.data or [])
-                except Exception:
-                    conf_count = len(_mock_confirmations_store)
+                if connection.is_table_available("community_confirmations"):
+                    try:
+                        conf_res = cli.table("community_confirmations").select("id", count="exact").execute()
+                        conf_count = conf_res.count if conf_res.count is not None else len(conf_res.data or [])
+                    except Exception:
+                        conf_count = len(_mock_confirmations_store)
+                else:
+                    try:
+                        upv_res = cli.table("community_reports").select("upvotes").execute()
+                        conf_count = sum(int(r.get("upvotes") or 0) for r in (upv_res.data or []))
+                    except Exception:
+                        conf_count = sum(int(r.get("upvotes", 0)) for r in _mock_reports_store.values())
 
                 return {
                     "total_reports": total,
@@ -461,44 +477,47 @@ class ReportRepository:
                 curr_report = await self.get_report_by_id(report_id)
                 curr_upvotes = int(curr_report.get("upvotes", 0)) if curr_report else 0
 
-                try:
-                    existing = (
-                        cli.table("community_confirmations")
-                        .select("id")
-                        .eq("report_id", rep_id_str)
-                        .eq("user_id", user_id_str)
-                        .execute()
-                    )
+                if connection.is_table_available("community_confirmations"):
+                    try:
+                        existing = (
+                            cli.table("community_confirmations")
+                            .select("id")
+                            .eq("report_id", rep_id_str)
+                            .eq("user_id", user_id_str)
+                            .execute()
+                        )
 
-                    if existing.data:
-                        cli.table("community_confirmations").delete().eq("report_id", rep_id_str).eq("user_id", user_id_str).execute()
-                        new_votes = max(0, curr_upvotes - 1)
-                        cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
-                        return False, new_votes
-                    else:
-                        cli.table("community_confirmations").insert({
-                            "report_id": rep_id_str,
-                            "user_id": user_id_str,
-                        }).execute()
-                        new_votes = curr_upvotes + 1
-                        cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
-                        return True, new_votes
-                except Exception as table_err:
-                    logger.warning("Confirmations table check error, using resilient upvotes: %s", table_err)
-                    if mock_key in _mock_confirmations_store:
-                        del _mock_confirmations_store[mock_key]
-                        new_votes = max(0, curr_upvotes - 1)
-                        cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
-                        return False, new_votes
-                    else:
-                        _mock_confirmations_store[mock_key] = {
-                            "report_id": report_id,
-                            "user_id": user_id,
-                            "created_at": datetime.now(timezone.utc),
-                        }
-                        new_votes = curr_upvotes + 1
-                        cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
-                        return True, new_votes
+                        if existing.data:
+                            cli.table("community_confirmations").delete().eq("report_id", rep_id_str).eq("user_id", user_id_str).execute()
+                            new_votes = max(0, curr_upvotes - 1)
+                            cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
+                            return False, new_votes
+                        else:
+                            cli.table("community_confirmations").insert({
+                                "report_id": rep_id_str,
+                                "user_id": user_id_str,
+                            }).execute()
+                            new_votes = curr_upvotes + 1
+                            cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
+                            return True, new_votes
+                    except Exception as table_err:
+                        logger.warning("Confirmations table check error, using resilient upvotes: %s", table_err)
+                
+                # Resilient fallback: directly update live community_reports upvotes
+                if mock_key in _mock_confirmations_store:
+                    del _mock_confirmations_store[mock_key]
+                    new_votes = max(0, curr_upvotes - 1)
+                    cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
+                    return False, new_votes
+                else:
+                    _mock_confirmations_store[mock_key] = {
+                        "report_id": report_id,
+                        "user_id": user_id,
+                        "created_at": datetime.now(timezone.utc),
+                    }
+                    new_votes = curr_upvotes + 1
+                    cli.table("community_reports").update({"upvotes": new_votes}).eq("id", rep_id_str).execute()
+                    return True, new_votes
             except Exception as e:
                 logger.error("Supabase toggle_confirmation error: %s", e)
 
@@ -526,7 +545,7 @@ class ReportRepository:
         rep_id_str = str(report_id)
         user_id_str = str(user_id)
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("community_confirmations"):
             try:
                 res = (
                     cli.table("community_confirmations")
@@ -561,7 +580,7 @@ class ReportRepository:
             "created_at": now.isoformat(),
         }
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("community_report_flags"):
             try:
                 cli.table("community_report_flags").insert(record).execute()
                 return record

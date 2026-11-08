@@ -44,6 +44,70 @@ supabase_auth_client = None
 async_engine: Optional[AsyncEngine] = None
 AsyncSessionLocal: Optional[async_sessionmaker[AsyncSession]] = None
 
+# PostgREST Schema Cache & Table Registry (prevents PGRST205 table-not-found errors)
+_available_tables_cache: Optional[set[str]] = None
+_cache_timestamp: float = 0.0
+_CORE_TABLES = {"users", "scan_history", "scan_results", "community_reports", "threat_reports"}
+
+
+def get_available_tables(force_refresh: bool = False) -> set[str]:
+    """
+    Inspects and caches the set of tables actively registered in the Supabase PostgREST schema cache.
+    Guarantees that TrustGuard AI never queries an unmapped table, preventing PGRST205 errors.
+    """
+    global _available_tables_cache, _cache_timestamp
+    import time
+    now = time.time()
+
+    if not force_refresh and _available_tables_cache is not None and (now - _cache_timestamp) < 60.0:
+        return _available_tables_cache
+
+    if not settings.supabase_configured:
+        return _CORE_TABLES.copy()
+
+    url = (settings.SUPABASE_URL or "").rstrip("/")
+    key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+    if not url or not key:
+        return _CORE_TABLES.copy()
+
+    try:
+        import httpx
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+        }
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(f"{url}/rest/v1/", headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                defs = data.get("definitions", {})
+                if defs:
+                    _available_tables_cache = set(defs.keys())
+                    _cache_timestamp = now
+                    logger.debug("Refreshed PostgREST schema cache tables: %s", _available_tables_cache)
+                    return _available_tables_cache
+    except Exception as e:
+        logger.debug("PostgREST schema cache inspection non-critical error: %s", e)
+
+    if _available_tables_cache is None:
+        _available_tables_cache = _CORE_TABLES.copy()
+    _cache_timestamp = now
+    return _available_tables_cache
+
+
+def is_table_available(table_name: str) -> bool:
+    """
+    Check if a table exists in the active Supabase PostgREST schema cache.
+    """
+    return table_name in get_available_tables()
+
+
+def refresh_schema_cache() -> set[str]:
+    """
+    Explicitly force-refreshes the PostgREST schema cache table list.
+    """
+    return get_available_tables(force_refresh=True)
+
 
 def get_supabase_service_client():
     """

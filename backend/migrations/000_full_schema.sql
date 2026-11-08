@@ -314,3 +314,182 @@ CREATE POLICY "Service role manages threat intelligence"
     ON public.threat_reports FOR ALL TO service_role
     USING (TRUE) WITH CHECK (TRUE);
 
+-- ------------------------------------------------------------------------------
+-- 8. COMMUNITY CONFIRMATIONS, FLAGS & MODERATION (Migration 005)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.community_confirmations (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id   UUID NOT NULL REFERENCES public.community_reports(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_report_user_confirmation UNIQUE (report_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_conf_report ON public.community_confirmations(report_id);
+CREATE INDEX IF NOT EXISTS idx_comm_conf_user ON public.community_confirmations(user_id);
+
+CREATE TABLE IF NOT EXISTS public.community_report_flags (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id   UUID NOT NULL REFERENCES public.community_reports(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    flag_reason VARCHAR(64) NOT NULL,
+    notes       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_report_user_flag UNIQUE (report_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_flags_report ON public.community_report_flags(report_id);
+
+CREATE TABLE IF NOT EXISTS public.community_moderation_logs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id       UUID NOT NULL REFERENCES public.community_reports(id) ON DELETE CASCADE,
+    moderator_id    UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    action          VARCHAR(64) NOT NULL,
+    previous_status VARCHAR(32),
+    new_status      VARCHAR(32) NOT NULL,
+    rationale       TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_mod_logs_report ON public.community_moderation_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_comm_mod_logs_moderator ON public.community_moderation_logs(moderator_id);
+
+-- Web3 Proof metadata on community_reports
+ALTER TABLE public.community_reports
+    ADD COLUMN IF NOT EXISTS integrity_hash VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS integrity_network VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS integrity_tx_hash VARCHAR(66),
+    ADD COLUMN IF NOT EXISTS integrity_timestamp TIMESTAMPTZ;
+
+-- RLS for community confirmations, flags, moderation logs
+ALTER TABLE public.community_confirmations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_report_flags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_moderation_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public can view confirmations count" ON public.community_confirmations;
+CREATE POLICY "Public can view confirmations count"
+    ON public.community_confirmations FOR SELECT
+    TO public USING (true);
+
+DROP POLICY IF EXISTS "Authenticated users insert confirmations" ON public.community_confirmations;
+CREATE POLICY "Authenticated users insert confirmations"
+    ON public.community_confirmations FOR INSERT
+    TO authenticated WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Authenticated users delete own confirmations" ON public.community_confirmations;
+CREATE POLICY "Authenticated users delete own confirmations"
+    ON public.community_confirmations FOR DELETE
+    TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Authenticated users flag reports" ON public.community_report_flags;
+CREATE POLICY "Authenticated users flag reports"
+    ON public.community_report_flags FOR INSERT
+    TO authenticated WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Service role manages flags" ON public.community_report_flags;
+CREATE POLICY "Service role manages flags"
+    ON public.community_report_flags FOR ALL
+    TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role manages moderation logs" ON public.community_moderation_logs;
+CREATE POLICY "Service role manages moderation logs"
+    ON public.community_moderation_logs FOR ALL
+    TO service_role USING (true) WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- 9. USER EMAIL PREFERENCES (Migration 006)
+-- ------------------------------------------------------------------------------
+ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS threat_digest_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_users_threat_digest_enabled 
+    ON public.users(threat_digest_enabled) 
+    WHERE threat_digest_enabled = TRUE;
+
+-- ------------------------------------------------------------------------------
+-- 10. DEDICATED ADMIN PANEL & SYSTEM SETTINGS (Migration 007)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    email VARCHAR(255),
+    full_name VARCHAR(255),
+    role VARCHAR(32) NOT NULL DEFAULT 'super_admin' CHECK (role IN ('super_admin', 'security_analyst', 'moderator')),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_login_at TIMESTAMPTZ,
+    last_login_ip VARCHAR(45),
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS set_admin_users_updated_at ON public.admin_users;
+CREATE TRIGGER set_admin_users_updated_at
+    BEFORE UPDATE ON public.admin_users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID REFERENCES public.admin_users(id) ON DELETE SET NULL,
+    admin_username VARCHAR(64) NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    target_resource VARCHAR(255),
+    outcome VARCHAR(32) NOT NULL DEFAULT 'SUCCESS' CHECK (outcome IN ('SUCCESS', 'FAILURE', 'DENIED')),
+    details JSONB DEFAULT '{}'::jsonb,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key VARCHAR(64) PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_by VARCHAR(64) DEFAULT 'system',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO public.system_settings (key, value, updated_by)
+VALUES (
+    'maintenance_config',
+    jsonb_build_object(
+        'maintenance_enabled', false,
+        'maintenance_message', 'TrustGuard AI is temporarily undergoing scheduled maintenance. We are optimizing our threat detection engines and will be back shortly.',
+        'estimated_restore_time', null,
+        'internal_reason', 'System online and operational.'
+    ),
+    'initial_setup'
+)
+ON CONFLICT (key) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_username ON public.admin_users(username);
+CREATE INDEX IF NOT EXISTS idx_admin_users_active ON public.admin_users(is_active);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_action ON public.admin_audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_id ON public.admin_audit_logs(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON public.admin_audit_logs(created_at DESC);
+
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role manages admin_users" ON public.admin_users;
+CREATE POLICY "Service role manages admin_users"
+    ON public.admin_users FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role manages admin_audit_logs" ON public.admin_audit_logs;
+CREATE POLICY "Service role manages admin_audit_logs"
+    ON public.admin_audit_logs FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role manages system_settings" ON public.system_settings;
+CREATE POLICY "Service role manages system_settings"
+    ON public.system_settings FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- 11. REFRESH POSTGREST SCHEMA CACHE
+-- ------------------------------------------------------------------------------
+NOTIFY pgrst, 'reload schema';
+
+

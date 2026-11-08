@@ -111,7 +111,7 @@ class AdminRepository:
         """Finds admin by username (case-insensitive) including password_hash."""
         u_clean = username.strip().lower()
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_users"):
             try:
                 res = await asyncio.to_thread(
                     lambda: cli.table("admin_users").select("*").ilike("username", u_clean).limit(1).execute()
@@ -129,7 +129,7 @@ class AdminRepository:
     async def get_admin_by_id(self, admin_id: uuid.UUID) -> Optional[AdminUserProfile]:
         """Finds active admin user profile by UUID."""
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_users"):
             try:
                 res = await asyncio.to_thread(
                     lambda: cli.table("admin_users").select("*").eq("id", str(admin_id)).limit(1).execute()
@@ -171,7 +171,7 @@ class AdminRepository:
         }
 
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_users"):
             try:
                 res = await asyncio.to_thread(
                     lambda: cli.table("admin_users").insert(record).execute()
@@ -189,7 +189,7 @@ class AdminRepository:
         """Updates admin password hash."""
         now = datetime.now(timezone.utc).isoformat()
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_users"):
             try:
                 await asyncio.to_thread(
                     lambda: cli.table("admin_users").update({
@@ -212,7 +212,7 @@ class AdminRepository:
         """Updates last_login_at and resets failed counter."""
         now = datetime.now(timezone.utc).isoformat()
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_users"):
             try:
                 await asyncio.to_thread(
                     lambda: cli.table("admin_users").update({
@@ -260,7 +260,7 @@ class AdminRepository:
         }
 
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_audit_logs"):
             try:
                 res = await asyncio.to_thread(
                     lambda: cli.table("admin_audit_logs").insert(record).execute()
@@ -284,7 +284,7 @@ class AdminRepository:
     ) -> PaginatedAdminAuditLogs:
         """Retrieves paginated audit log entries."""
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("admin_audit_logs"):
             try:
                 query = cli.table("admin_audit_logs").select("*", count="exact")
                 if action:
@@ -352,7 +352,7 @@ class AdminRepository:
             return self._cached_cfg
 
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("system_settings"):
             try:
                 res = await asyncio.to_thread(
                     lambda: cli.table("system_settings").select("*").eq("key", "maintenance_config").limit(1).execute()
@@ -398,7 +398,7 @@ class AdminRepository:
         }
 
         cli = self.client
-        if cli is not None:
+        if cli is not None and connection.is_table_available("system_settings"):
             try:
                 await asyncio.to_thread(
                     lambda: cli.table("system_settings").upsert(row).execute()
@@ -825,13 +825,21 @@ class AdminRepository:
 
                 # Retrieve confirmations safely
                 confirmations = []
-                try:
-                    conf_res = await asyncio.to_thread(
-                        lambda: cli.table("community_confirmations").select("*").eq("report_id", str(report_id)).execute()
-                    )
-                    confirmations = conf_res.data or []
-                except Exception:
-                    pass
+                if connection.is_table_available("community_confirmations"):
+                    try:
+                        conf_res = await asyncio.to_thread(
+                            lambda: cli.table("community_confirmations").select("*").eq("report_id", str(report_id)).execute()
+                        )
+                        confirmations = conf_res.data or []
+                    except Exception:
+                        pass
+                else:
+                    from app.database.repositories.report_repo import _mock_confirmations_store
+                    rep_id_prefix = f"{str(report_id)}:"
+                    confirmations = [
+                        val for key, val in _mock_confirmations_store.items()
+                        if key.startswith(rep_id_prefix)
+                    ]
 
                 # Retrieve associated scan if scan_id present
                 scan_data = None
