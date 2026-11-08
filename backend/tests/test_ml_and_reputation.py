@@ -12,22 +12,22 @@ Tests:
 
 import pytest
 import asyncio
-from backend.app.utils.entropy import (
+from app.utils.entropy import (
     calculate_shannon_entropy,
     calculate_char_ratios,
     detect_homograph_and_lookalikes,
 )
-from backend.app.services.url_analyzer import URLAnalyzer
-from backend.app.services.ml_feature_adapter import (
+from app.services.url_analyzer import URLAnalyzer
+from app.services.ml_feature_adapter import (
     extract_feature_vector,
     generate_explainable_indicators,
     FEATURE_NAMES_V1,
     FEATURE_NAMES_V2,
 )
-from backend.app.services.ml_detection_service import MLDetectionService
-from backend.app.services.domain_reputation_service import DomainReputationService
-from backend.app.services.risk_scoring_service import RiskScoringService
-from backend.app.core.trusted_domains import (
+from app.services.ml_detection_service import MLDetectionService
+from app.services.domain_reputation_service import DomainReputationService
+from app.services.risk_scoring_service import RiskScoringService
+from app.core.trusted_domains import (
     extract_registered_domain,
     check_brand_impersonation,
     VERIFIED_ENTITIES,
