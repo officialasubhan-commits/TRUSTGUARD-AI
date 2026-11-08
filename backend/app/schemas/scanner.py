@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.domain_reputation import DomainReputationResult
 from app.schemas.ml import MLPredictionResponse
 from app.schemas.risk_scoring import DigitalTrustAssessment
 from app.schemas.ssl import SSLValidationResponse
@@ -91,6 +92,10 @@ class URLSubmissionResponse(BaseModel):
     risk_level: Optional[str] = Field(
         default=None,
         description="Convenience top-level access to overall risk level (LOW, MEDIUM, HIGH, CRITICAL, UNKNOWN)",
+    )
+    domain_reputation: Optional[DomainReputationResult] = Field(
+        default=None,
+        description="Domain reputation, brand verification, lookalike checks, and historical stability",
     )
     message: str = Field(
         default="URL accepted for multi-layer security analysis.",

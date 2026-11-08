@@ -10,9 +10,11 @@ from app.api.v1.endpoints import (
     admin,
     authentication,
     community,
+    domain_reputation,
     health,
     history,
     maintenance,
+    ml,
     reports,
     scanner,
     scans,
@@ -30,6 +32,10 @@ api_router.include_router(scanner.router, prefix="/scan", tags=["Scanner"])
 api_router.include_router(scans.router, prefix="/scans", tags=["Scan History & Reports"])
 api_router.include_router(
     threat_intel.router, prefix="/threat-intelligence", tags=["Threat Intelligence"]
+)
+api_router.include_router(ml.router, prefix="/ml", tags=["Machine Learning"])
+api_router.include_router(
+    domain_reputation.router, prefix="/domain-reputation", tags=["Domain Reputation"]
 )
 api_router.include_router(history.router, prefix="/history", tags=["History"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])

@@ -64,6 +64,8 @@ async def submit_scan(
         is_guest = True
 
     client_ip = request.client.host if request.client else None
+    if client_ip in ("testclient", "localhost", None):
+        client_ip = "127.0.0.1"
 
     logger.info(
         "URL scan submission received: url='%s' user_id=%s is_guest=%s",

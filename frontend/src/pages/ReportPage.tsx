@@ -119,6 +119,7 @@ function mapScanDetailToReport(raw: any, fallbackScanId: string): DetailedSecuri
           ssl_score: result?.ssl_score ?? null,
         }
       : raw?.ssl_tls_validation ?? null,
+    domain_reputation: raw?.domain_reputation ?? result?.domain_reputation ?? null,
   };
 }
 

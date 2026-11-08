@@ -24,6 +24,7 @@ from app.schemas.scan import (
 from app.schemas.scanner import PreliminaryAnalysis, URLSubmissionResponse
 from app.schemas.ssl import SSLValidationResponse
 from app.schemas.virustotal import VirusTotalReportResponse
+from app.services.domain_reputation_service import DomainReputationService
 from app.services.ml_detection_service import MLDetectionService, get_ml_service
 from app.services.risk_scoring_service import (
     RiskScoringService,
@@ -47,6 +48,7 @@ class ScanService:
         ml_service: Optional[MLDetectionService] = None,
         ssl_service: Optional[SSLValidationService] = None,
         risk_service: Optional[RiskScoringService] = None,
+        reputation_service: Optional[DomainReputationService] = None,
     ):
         self._scan_repo = scan_repo or ScanRepository()
         self._analyzer = analyzer or URLAnalyzer()
@@ -54,6 +56,7 @@ class ScanService:
         self._ml_service = ml_service or get_ml_service()
         self._ssl_service = ssl_service or get_ssl_service()
         self._risk_service = risk_service or get_risk_scoring_service()
+        self._reputation_service = reputation_service or DomainReputationService(self._scan_repo)
 
     async def submit_url(
         self,
@@ -173,9 +176,36 @@ class ScanService:
             logger.info("[TIMING] VirusTotal threat intelligence: duration=%.2fms status=%s", t_ms, vt_status)
             return res
 
+        # Engine D: Domain Reputation Intelligence
+        async def _eval_reputation():
+            t0 = time.perf_counter()
+            current_threats = [
+                getattr(i, "name", i.get("name") if isinstance(i, dict) else "")
+                for i in preliminary_analysis.indicators
+                if getattr(i, "severity", i.get("severity") if isinstance(i, dict) else "") in ("high", "medium")
+            ]
+            try:
+                res = await self._reputation_service.evaluate_domain(
+                    canonical_url, current_threat_signals=current_threats
+                )
+            except Exception as e:
+                logger.warning("Domain reputation evaluation failed: %s", e)
+                from app.schemas.domain_reputation import DomainReputationResult
+                res = DomainReputationResult(
+                    domain=urlparse(canonical_url).hostname or "",
+                    registered_domain=urlparse(canonical_url).hostname or "",
+                    category="NEUTRAL_UNFAMILIAR",
+                    reputation_score=50,
+                    uncertainty_level="HIGH",
+                    reasons=["Reputation evaluation timed out or encountered an error."],
+                )
+            t_ms = (time.perf_counter() - t0) * 1000
+            logger.info("[TIMING] Domain reputation: duration=%.2fms category=%s score=%s", t_ms, res.category, res.reputation_score)
+            return res
+
         # Run independent analysis engines concurrently
-        ml_prediction, ssl_analysis, vt_report = await asyncio.gather(
-            _eval_ml(), _eval_ssl(), _eval_vt()
+        ml_prediction, ssl_analysis, vt_report, domain_reputation = await asyncio.gather(
+            _eval_ml(), _eval_ssl(), _eval_vt(), _eval_reputation()
         )
 
         # 4. Centralized Digital Trust Score & Risk Assessment Synthesis
@@ -186,6 +216,7 @@ class ScanService:
             vt_report=vt_report,
             ml_prediction=ml_prediction,
             ssl_analysis=ssl_analysis,
+            domain_reputation=domain_reputation,
         )
         t_risk_ms = (time.perf_counter() - t_risk_start) * 1000
         logger.info(
@@ -306,6 +337,7 @@ class ScanService:
             trust_assessment=trust_assessment,
             digital_trust_score=trust_assessment.digital_trust_score,
             risk_level=trust_assessment.risk_level,
+            domain_reputation=domain_reputation,
             message="URL accepted and complete multi-layer security analysis conducted.",
             submitted_at=scan_record.created_at,
         )

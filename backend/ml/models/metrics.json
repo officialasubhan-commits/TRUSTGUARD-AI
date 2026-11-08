@@ -1,16 +1,21 @@
 {
-  "model_version": "rf-v1.0.0",
-  "accuracy": 0.9817,
-  "precision": 0.9652,
-  "recall": 0.9823,
-  "f1_score": 0.9737,
-  "roc_auc": 0.9993,
+  "model_version": "rf-v2.0.0",
+  "selected_algorithm": "GradientBoosting",
+  "accuracy": 0.9848,
+  "precision": 1.0,
+  "recall": 0.9558,
+  "f1_score": 0.9774,
+  "roc_auc": 0.9981,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0442,
+  "cv_f1_mean": 0.9775,
+  "cv_f1_std": 0.0096,
   "confusion_matrix": {
-    "true_negatives": 211,
-    "false_positives": 4,
-    "false_negatives": 2,
-    "true_positives": 111
+    "true_negatives": 215,
+    "false_positives": 0,
+    "false_negatives": 5,
+    "true_positives": 108
   },
   "test_samples": 328,
-  "evaluated_at": "2026-11-07T09:57:01.684023+00:00"
+  "evaluated_at": "2026-11-08T18:12:11.639325+00:00"
 }

@@ -142,8 +142,9 @@ class MLDetectionService:
 
         # Case 2: Active Model Inference
         try:
-            # 1. Extract and validate numerical feature vector
-            vector = extract_feature_vector(features_dict)
+            # 1. Extract and validate numerical feature vector matching model's expected input dimension
+            n_expected = getattr(self._model, "n_features_in_", None)
+            vector = extract_feature_vector(features_dict, target_feature_count=n_expected)
 
             # 2. Compute class probabilities [p(legitimate), p(phishing)]
             probas = self._model.predict_proba([vector])[0]

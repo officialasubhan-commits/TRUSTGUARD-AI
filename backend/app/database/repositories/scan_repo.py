@@ -962,3 +962,43 @@ class ScanRepository:
             created_at=c_at,
             completed_at=comp_at,
         )
+
+    async def get_scans_by_domain(
+        self, domain: str, limit: int = 20
+    ) -> List[ScanHistoryResponse]:
+        """
+        Retrieves recent historical scans for a specific domain to compute reputation trends.
+        """
+        norm_domain = domain.lower().strip()
+        client = self.client
+        if client is not None:
+            try:
+                def _query():
+                    return (
+                        client.table("scan_history")
+                        .select("*")
+                        .eq("domain", norm_domain)
+                        .order("created_at", desc=True)
+                        .limit(limit)
+                        .execute()
+                    )
+
+                res = await asyncio.wait_for(asyncio.to_thread(_query), timeout=1.5)
+                if res and res.data:
+                    return [ScanHistoryResponse.model_validate(r) for r in res.data]
+            except Exception as e:
+                logger.debug("Remote get_scans_by_domain query failed: %s", e)
+
+        # In-memory fallback
+        results = []
+        for record in _mock_scans_store.values():
+            if record.get("domain", "").lower() == norm_domain:
+                try:
+                    results.append(ScanHistoryResponse.model_validate(record))
+                except Exception:
+                    continue
+        results.sort(
+            key=lambda x: x.created_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return results[:limit]

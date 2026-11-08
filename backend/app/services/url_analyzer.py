@@ -7,8 +7,15 @@ Computes rule-based preliminary threat indicators without declaring a final verd
 from __future__ import annotations
 
 import ipaddress
+import re
 from typing import Any, Dict
 from urllib.parse import parse_qsl, urlparse
+
+from app.utils.entropy import (
+    calculate_char_ratios,
+    calculate_shannon_entropy,
+    detect_homograph_and_lookalikes,
+)
 
 # Suspicious keywords commonly exploited in phishing and social engineering URLs
 _SUSPICIOUS_KEYWORDS = [
@@ -165,6 +172,18 @@ class URLAnalyzer:
             subdomain_str = ".".join(host_parts[:-2])
             has_brand_in_subdomain = any(brand in subdomain_str for brand in _COMMON_BRAND_NAMES)
 
+        # Extended Information-Theoretic & Lexical Features
+        url_entropy = calculate_shannon_entropy(normalized_url)
+        hostname_entropy = calculate_shannon_entropy(hostname)
+        digit_letter_ratio, vowel_consonant_ratio = calculate_char_ratios(hostname)
+        has_homograph, homograph_reason = detect_homograph_and_lookalikes(hostname)
+        has_hex_encoding = bool(re.search(r"%[0-9a-fA-F]{2}", normalized_url))
+        
+        common_tlds = [".com", ".net", ".org", ".edu", ".gov", ".xyz", ".top"]
+        tld_in_path = any(f"{tld}/" in path.lower() or path.lower().endswith(tld) for tld in common_tlds)
+        tokens = [t for t in re.split(r"[^a-zA-Z0-9]", normalized_url) if t]
+        longest_token_length = max((len(t) for t in tokens), default=0)
+
         features = {
             "url_length": url_length,
             "hostname_length": hostname_length,
@@ -182,6 +201,7 @@ class URLAnalyzer:
             "is_shortened": is_shortened,
             "contains_suspicious_keywords": has_suspicious_keywords,
             "suspicious_keywords": found_keywords,
+            "suspicious_keyword_count": len(found_keywords),
             "excessive_subdomains": excessive_subdomains,
             "has_at_symbol": has_at_symbol,
             "has_double_slash_in_path": has_double_slash,
@@ -189,6 +209,15 @@ class URLAnalyzer:
             "has_suspicious_tld": has_suspicious_tld,
             "has_non_standard_port": has_non_standard_port,
             "has_brand_in_subdomain": has_brand_in_subdomain,
+            "url_entropy": url_entropy,
+            "hostname_entropy": hostname_entropy,
+            "digit_letter_ratio": digit_letter_ratio,
+            "vowel_consonant_ratio": vowel_consonant_ratio,
+            "has_homograph": has_homograph,
+            "homograph_reason": homograph_reason,
+            "has_hex_encoding": has_hex_encoding,
+            "tld_in_path": tld_in_path,
+            "longest_token_length": longest_token_length,
         }
 
         # --- 3. Generate Preliminary Risk Indicators ---

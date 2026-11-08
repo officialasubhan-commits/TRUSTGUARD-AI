@@ -4,6 +4,9 @@ import {
   Database,
   Binary,
   Lock,
+  Globe,
+  ShieldCheck,
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   HelpCircle,
@@ -19,6 +22,7 @@ interface SecurityEngineCardsProps {
 export const SecurityEngineCards: React.FC<SecurityEngineCardsProps> = ({ report }) => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     ml: true,
+    rep: true,
     vt: true,
     url: true,
     ssl: true,
@@ -29,6 +33,7 @@ export const SecurityEngineCards: React.FC<SecurityEngineCardsProps> = ({ report
   };
 
   const ml = report.ml_phishing_prediction;
+  const rep = report.domain_reputation;
   const vt = report.virustotal_findings;
   const urlAnalysis = report.url_analysis;
   const ssl = report.ssl_tls_validation;
@@ -37,7 +42,7 @@ export const SecurityEngineCards: React.FC<SecurityEngineCardsProps> = ({ report
     <div className="space-y-4">
       <div className="flex items-center justify-between pb-1 border-b border-[#222222]">
         <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#A1A1A1]">
-          SECURITY INSPECTION ENGINES (4 SUBSYSTEMS)
+          SECURITY INSPECTION ENGINES (MULTI-LAYER INTELLIGENCE)
         </h2>
         <span className="text-[11px] font-mono text-[#666666]">
           EXPANDABLE MODULAR AUDIT TELEMETRY
@@ -60,7 +65,7 @@ export const SecurityEngineCards: React.FC<SecurityEngineCardsProps> = ({ report
                   Machine Learning Detection
                 </h3>
                 <span className="text-[11px] font-mono text-[#666666]">
-                  Model: {report.model_version || 'rf-v1.0.0'} (Random Forest)
+                  Model: {report.model_version || 'rf-v2.0.0'} (AI Threat Classifier)
                 </span>
               </div>
             </div>
@@ -458,6 +463,120 @@ export const SecurityEngineCards: React.FC<SecurityEngineCardsProps> = ({ report
                     Could not establish transport connection to audit SSL/TLS certificates due to network timeout
                     or connection refusal.
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        {/* ================================================================= */}
+        {/* 5. DOMAIN REPUTATION & BRAND IDENTITY                             */}
+        {/* ================================================================= */}
+        <Card variant="standard" className="p-5 space-y-4 md:col-span-2">
+          <div
+            className="flex items-start justify-between cursor-pointer select-none"
+            onClick={() => toggle('rep')}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Globe className="w-4 h-4 text-[#A1A1A1]" />
+              <div>
+                <h3 className="text-xs font-mono font-semibold uppercase text-[#F5F5F5]">
+                  Domain Reputation & Brand Identity Intelligence
+                </h3>
+                <span className="text-[11px] font-mono text-[#666666]">
+                  Registered Domain: {rep?.registered_domain || report.domain || 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Badge
+                variant={
+                  rep?.category === 'VERIFIED_ESTABLISHED'
+                    ? 'safe'
+                    : rep?.category === 'IMPERSONATION_RISK' || rep?.category === 'CONFIRMED_MALICIOUS'
+                    ? 'malicious'
+                    : rep?.category === 'SUSPICIOUS_PATTERN'
+                    ? 'suspicious'
+                    : 'unknown'
+                }
+                size="xs"
+                dot
+              >
+                {rep?.category?.replace(/_/g, ' ') || 'NEUTRAL UNFAMILIAR'}
+              </Badge>
+              {expanded.rep ? (
+                <ChevronUp className="w-4 h-4 text-[#666666]" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-[#666666]" />
+              )}
+            </div>
+          </div>
+
+          {expanded.rep && (
+            <div className="space-y-3 pt-2 border-t border-[#222222] text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-[#101010] p-3 border border-[#1F1F1F]">
+                <div>
+                  <span className="text-[#666666] text-[10px] uppercase block">
+                    Reputation Subscore
+                  </span>
+                  <span className="text-sm font-bold text-[#F5F5F5]">
+                    {rep?.reputation_score !== undefined ? `${rep.reputation_score}/100` : '50/100 (Neutral)'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[#666666] text-[10px] uppercase block">
+                    Verified Identity
+                  </span>
+                  <span className="text-sm font-bold text-[#F5F5F5]">
+                    {rep?.verified_identity ? (
+                      <span className="text-[#4ADE80] flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        {rep.verified_identity}
+                      </span>
+                    ) : (
+                      <span className="text-[#A1A1A1]">Unverified Entity</span>
+                    )}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[#666666] text-[10px] uppercase block">
+                    Historical Stability
+                  </span>
+                  <span className="text-sm font-bold text-[#F5F5F5]">
+                    {rep?.historical_trend?.reputation_stability?.replace(/_/g, ' ') || 'NEW UNOBSERVED'}
+                  </span>
+                </div>
+              </div>
+
+              {rep?.is_lookalike_or_impersonation && (
+                <div className="p-3 bg-[#2A0808] border border-[#7F1D1D] text-[#FCA5A5] flex items-start gap-2 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block uppercase text-[#EF4444]">
+                      Impersonation Alert
+                    </span>
+                    This domain mimics protected brand{' '}
+                    <strong className="underline text-white font-mono">
+                      {rep.impersonated_brand}
+                    </strong>{' '}
+                    using deceptive typo/subdomain structures.
+                  </div>
+                </div>
+              )}
+
+              {rep?.reasons && rep.reasons.length > 0 && (
+                <div className="p-2.5 bg-[#0D0D0D] border border-[#1A1A1A] space-y-1">
+                  <span className="text-[10px] uppercase text-[#666666] block font-semibold">
+                    Reputation Evidence & Observations
+                  </span>
+                  <ul className="list-disc list-inside text-[11px] text-[#A1A1A1] space-y-0.5">
+                    {rep.reasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

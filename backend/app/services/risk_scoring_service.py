@@ -22,6 +22,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from app.core.config import settings
+from app.schemas.domain_reputation import DomainReputationResult
 from app.schemas.ml import MLPredictionResponse
 from app.schemas.risk_scoring import (
     AssessmentStatusType,
@@ -47,6 +48,7 @@ class RiskScoringService:
         vt_report: Optional[VirusTotalReportResponse] = None,
         ml_prediction: Optional[MLPredictionResponse] = None,
         ssl_analysis: Optional[SSLValidationResponse] = None,
+        domain_reputation: Optional[DomainReputationResult] = None,
     ) -> DigitalTrustAssessment:
         """
         Synthesizes telemetry from all active security inspection modules into
@@ -157,6 +159,61 @@ class RiskScoringService:
             high_severity_override = True
             override_reason = "Multiple severe deception mechanisms detected (raw IP host combined with userinfo @ sign)."
             raw_risk = max(raw_risk, 80.0)
+
+        # Rule E: Protected Brand Impersonation / Lookalike Domain
+        elif domain_reputation and domain_reputation.is_lookalike_or_impersonation:
+            high_severity_override = True
+            brand_target = domain_reputation.impersonated_brand or "a known brand"
+            override_reason = f"Security Override: Domain is deceptively impersonating protected brand '{brand_target}'."
+            raw_risk = max(raw_risk, 85.0)
+
+        # Process Domain Reputation Indicators
+        if domain_reputation is not None:
+            if domain_reputation.is_lookalike_or_impersonation:
+                risk_indicators.append(
+                    FindingItem(
+                        title="Brand Impersonation Detected",
+                        description=f"Deceptive brand impersonation targeting '{domain_reputation.impersonated_brand}'.",
+                        source_module="url_heuristics",
+                        severity="high",
+                        evidence=domain_reputation.domain,
+                        explanation="This domain appears designed to mimic a trusted institution or service to harvest credentials.",
+                    )
+                )
+            elif domain_reputation.is_established_authority:
+                positive_indicators.append(
+                    FindingItem(
+                        title="Verified Authority Domain",
+                        description=f"Authentic registered domain for verified entity: {domain_reputation.verified_identity}.",
+                        source_module="url_heuristics",
+                        severity="info",
+                        evidence=domain_reputation.registered_domain,
+                        explanation="Authoritative domain identity confirmed against trusted entity infrastructure records.",
+                    )
+                )
+            elif domain_reputation.category == "NEUTRAL_UNFAMILIAR":
+                unknown_indicators.append(
+                    FindingItem(
+                        title="Unfamiliar Domain Infrastructure",
+                        description="Domain has limited historical reputation telemetry; assessed based on active technical indicators.",
+                        source_module="url_heuristics",
+                        severity="info",
+                        evidence=domain_reputation.domain,
+                        explanation="Unfamiliarity does not indicate danger, but users should exercise normal verification.",
+                    )
+                )
+
+            if domain_reputation.historical_trend.change_alert:
+                risk_indicators.append(
+                    FindingItem(
+                        title="Behavioral Drift Detected",
+                        description=domain_reputation.historical_trend.change_alert,
+                        source_module="url_heuristics",
+                        severity="medium",
+                        evidence=f"Historical scans: {domain_reputation.historical_trend.total_scans}",
+                        explanation="Domain previously evaluated as safe now displays anomalies consistent with possible compromise.",
+                    )
+                )
 
         # Check for insufficient data (only if no high-severity override was triggered)
         if (

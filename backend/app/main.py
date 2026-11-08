@@ -46,6 +46,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     # Initialize database connection layer
     init_database()
+    # Preload Machine Learning Detection Model
+    try:
+        from app.services.ml_detection_service import get_ml_service
+        ml_svc = get_ml_service()
+        logger.info(
+            "ML Detection Service initialized: version=%s, status=%s",
+            ml_svc.model_version,
+            ml_svc.status,
+        )
+    except Exception as e:
+        logger.warning("ML Detection Service preload warning: %s", e)
     yield
     logger.info("Shutting down %s...", settings.APP_NAME)
 

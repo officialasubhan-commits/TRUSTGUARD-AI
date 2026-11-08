@@ -1,0 +1,107 @@
+{
+  "LogisticRegression": {
+    "algorithm": "LogisticRegression",
+    "description": "Baseline linear classifier with L2 regularization",
+    "cv_f1_mean": 0.9752,
+    "cv_f1_std": 0.0078,
+    "test_accuracy": 0.9756,
+    "test_precision": 1.0,
+    "test_recall": 0.9292,
+    "test_f1": 0.9633,
+    "test_roc_auc": 0.9873,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0708,
+    "confusion_matrix": {
+      "true_negatives": 215,
+      "false_positives": 0,
+      "false_negatives": 8,
+      "true_positives": 105
+    },
+    "fit_time_ms": 43.32,
+    "infer_time_ms": 0.2
+  },
+  "DecisionTree": {
+    "algorithm": "DecisionTree",
+    "description": "Interpretable tree classifier with depth bound",
+    "cv_f1_mean": 0.9708,
+    "cv_f1_std": 0.0122,
+    "test_accuracy": 0.9695,
+    "test_precision": 0.9905,
+    "test_recall": 0.9204,
+    "test_f1": 0.9541,
+    "test_roc_auc": 0.9681,
+    "false_positive_rate": 0.0047,
+    "false_negative_rate": 0.0796,
+    "confusion_matrix": {
+      "true_negatives": 214,
+      "false_positives": 1,
+      "false_negatives": 9,
+      "true_positives": 104
+    },
+    "fit_time_ms": 43.11,
+    "infer_time_ms": 0.25
+  },
+  "RandomForest": {
+    "algorithm": "RandomForest",
+    "description": "Ensemble of bagging decision trees with feature sub-sampling",
+    "cv_f1_mean": 0.9811,
+    "cv_f1_std": 0.0058,
+    "test_accuracy": 0.9756,
+    "test_precision": 0.9907,
+    "test_recall": 0.9381,
+    "test_f1": 0.9636,
+    "test_roc_auc": 0.9968,
+    "false_positive_rate": 0.0047,
+    "false_negative_rate": 0.0619,
+    "confusion_matrix": {
+      "true_negatives": 214,
+      "false_positives": 1,
+      "false_negatives": 7,
+      "true_positives": 106
+    },
+    "fit_time_ms": 1176.18,
+    "infer_time_ms": 35.9
+  },
+  "GradientBoosting": {
+    "algorithm": "GradientBoosting",
+    "description": "Sequential boosting optimizing pseudo-residuals",
+    "cv_f1_mean": 0.9775,
+    "cv_f1_std": 0.0096,
+    "test_accuracy": 0.9848,
+    "test_precision": 1.0,
+    "test_recall": 0.9558,
+    "test_f1": 0.9774,
+    "test_roc_auc": 0.9981,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0442,
+    "confusion_matrix": {
+      "true_negatives": 215,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "true_positives": 108
+    },
+    "fit_time_ms": 2494.87,
+    "infer_time_ms": 1.45
+  },
+  "ExtraTrees": {
+    "algorithm": "ExtraTrees",
+    "description": "Extremely randomized trees ensemble for variance reduction",
+    "cv_f1_mean": 0.973,
+    "cv_f1_std": 0.0042,
+    "test_accuracy": 0.9726,
+    "test_precision": 1.0,
+    "test_recall": 0.9204,
+    "test_f1": 0.9585,
+    "test_roc_auc": 0.9972,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0796,
+    "confusion_matrix": {
+      "true_negatives": 215,
+      "false_positives": 0,
+      "false_negatives": 9,
+      "true_positives": 104
+    },
+    "fit_time_ms": 899.63,
+    "infer_time_ms": 26.63
+  }
+}

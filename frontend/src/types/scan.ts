@@ -96,6 +96,35 @@ export interface FindingItem {
   explanation?: string | null;
 }
 
+export interface DomainReputationInfo {
+  domain: string;
+  registered_domain: string;
+  category:
+    | 'VERIFIED_ESTABLISHED'
+    | 'REPUTABLE'
+    | 'NEUTRAL_UNFAMILIAR'
+    | 'SUSPICIOUS_PATTERN'
+    | 'IMPERSONATION_RISK'
+    | 'CONFIRMED_MALICIOUS';
+  reputation_score: number;
+  verified_identity?: string | null;
+  is_established_authority: boolean;
+  is_lookalike_or_impersonation: boolean;
+  impersonated_brand?: string | null;
+  dns_intelligence?: {
+    resolves: boolean;
+    ip_addresses: string[];
+    is_private_or_loopback: boolean;
+  };
+  historical_trend?: {
+    total_scans: number;
+    reputation_stability: string;
+    change_alert?: string | null;
+  };
+  reasons: string[];
+  uncertainty_level: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
 export interface DetailedSecurityReport {
   scan_id: string;
   original_url: string;
@@ -126,6 +155,7 @@ export interface DetailedSecurityReport {
   virustotal_findings?: Record<string, any> | null;
   ml_phishing_prediction?: Record<string, any> | null;
   ssl_tls_validation?: Record<string, any> | null;
+  domain_reputation?: DomainReputationInfo | null;
 }
 
 export interface ScanResult {
@@ -143,6 +173,7 @@ export interface ScanResult {
   ml_prediction?: MLPrediction;
   ssl_analysis?: SSLAnalysis;
   trust_assessment?: TrustAssessment;
+  domain_reputation?: DomainReputationInfo | null;
   digital_trust_score?: number | null;
   risk_level?: RiskLevel;
   message: string;
