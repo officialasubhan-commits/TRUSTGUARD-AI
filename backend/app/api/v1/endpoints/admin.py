@@ -45,6 +45,7 @@ from app.schemas.admin import (
     PaginatedAdminUsers,
     SystemHealthResponse,
 )
+from app.schemas.report import CommunityReportModerationUpdate
 from app.services.admin_service import AdminService, get_admin_service
 
 logger = logging.getLogger("trustguard.api.admin")
@@ -243,6 +244,30 @@ async def admin_list_reports_compat(
     service: AdminService = Depends(get_admin_service),
 ) -> PaginatedAdminReports:
     return await service.list_reports(page, page_size, moderation_status, category)
+
+
+@router.patch(
+    "/community/reports/{report_id}",
+    include_in_schema=False,
+)
+async def admin_moderate_report_compat(
+    report_id: uuid.UUID,
+    update_in: CommunityReportModerationUpdate,
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+) -> Any:
+    from app.core.security import AuthenticatedUser
+    from app.services.community_reporting_service import get_community_service
+    service = get_community_service()
+    moderator = AuthenticatedUser(
+        user_id=admin_user.id,
+        email=admin_user.username,
+        role="admin",
+    )
+    return await service.admin_moderate_report(
+        report_id=report_id,
+        moderator=moderator,
+        update_in=update_in,
+    )
 
 
 @router.get(

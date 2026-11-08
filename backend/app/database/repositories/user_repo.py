@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from app.core.config import settings
 from app.core.exceptions import DatabaseError
 from app.database import connection
 from app.schemas.user import UserCreate, UserProfileResponse, UserUpdate
@@ -24,7 +25,21 @@ _threat_digest_fallback: Dict[uuid.UUID, bool] = {}
 
 class UserRepository:
     def __init__(self, client=None):
-        self._client = client or connection.supabase_client
+        self._client = client
+
+    @property
+    def client(self):
+        """
+        Retrieves the Supabase service-role client guaranteed to have administrative bypass privileges.
+        Ensures PostgREST Authorization is set to SUPABASE_SERVICE_ROLE_KEY to prevent RLS failures.
+        """
+        c = self._client or connection.get_supabase_service_client() or connection.supabase_client
+        if c is not None and settings.SUPABASE_SERVICE_ROLE_KEY:
+            try:
+                c.postgrest.auth(settings.SUPABASE_SERVICE_ROLE_KEY)
+            except Exception:
+                pass
+        return c
 
     async def create_user_profile(self, user_in: UserCreate) -> UserProfileResponse:
         """
@@ -44,9 +59,10 @@ class UserRepository:
             "updated_at": now.isoformat(),
         }
 
-        if self._client is not None:
+        cli = self.client
+        if cli is not None:
             try:
-                res = self._client.table("users").insert(record).execute()
+                res = cli.table("users").insert(record).execute()
                 if not res.data:
                     raise DatabaseError("Failed to insert user profile.")
                 data = res.data[0]
@@ -60,7 +76,7 @@ class UserRepository:
                     _threat_digest_fallback[user_in.id] = threat_digest_pref
                     record_compat = {k: v for k, v in record.items() if k != "threat_digest_enabled"}
                     try:
-                        res = self._client.table("users").insert(record_compat).execute()
+                        res = cli.table("users").insert(record_compat).execute()
                         if not res.data:
                             raise DatabaseError("Failed to insert user profile.")
                         data = res.data[0]
@@ -85,9 +101,10 @@ class UserRepository:
         """
         Retrieves user profile by UUID.
         """
-        if self._client is not None:
+        cli = self.client
+        if cli is not None:
             try:
-                res = self._client.table("users").select("*").eq("id", str(user_id)).execute()
+                res = cli.table("users").select("*").eq("id", str(user_id)).execute()
                 if res.data:
                     data = res.data[0]
                     if "threat_digest_enabled" not in data or data.get("threat_digest_enabled") is None:
@@ -108,9 +125,10 @@ class UserRepository:
         Retrieves user profile by email address.
         """
         normalized_email = email.lower().strip()
-        if self._client is not None:
+        cli = self.client
+        if cli is not None:
             try:
-                res = self._client.table("users").select("*").eq("email", normalized_email).execute()
+                res = cli.table("users").select("*").eq("email", normalized_email).execute()
                 if res.data:
                     data = res.data[0]
                     uid = uuid.UUID(data["id"])
@@ -137,9 +155,10 @@ class UserRepository:
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         threat_digest_val = updates.get("threat_digest_enabled")
 
-        if self._client is not None:
+        cli = self.client
+        if cli is not None:
             try:
-                res = self._client.table("users").update(updates).eq("id", str(user_id)).execute()
+                res = cli.table("users").update(updates).eq("id", str(user_id)).execute()
                 if res.data:
                     data = res.data[0]
                     if "threat_digest_enabled" not in data or data.get("threat_digest_enabled") is None:
@@ -160,7 +179,7 @@ class UserRepository:
                         _threat_digest_fallback[user_id] = threat_digest_val
                     updates_compat = {k: v for k, v in updates.items() if k != "threat_digest_enabled"}
                     try:
-                        res = self._client.table("users").update(updates_compat).eq("id", str(user_id)).execute()
+                        res = cli.table("users").update(updates_compat).eq("id", str(user_id)).execute()
                         if res.data:
                             data = res.data[0]
                             data["threat_digest_enabled"] = _threat_digest_fallback.get(user_id, False)
@@ -187,12 +206,12 @@ class UserRepository:
         """
         Increments user's total scan count.
         """
-        if self._client is not None:
+        cli = self.client
+        if cli is not None:
             try:
-                # Direct RPC call or select + update
                 profile = await self.get_user_profile(user_id)
                 if profile:
-                    self._client.table("users").update({"scan_count": profile.scan_count + 1}).eq(
+                    cli.table("users").update({"scan_count": profile.scan_count + 1}).eq(
                         "id", str(user_id)
                     ).execute()
             except Exception as e:

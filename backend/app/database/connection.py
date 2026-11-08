@@ -15,19 +15,28 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.orm import declarative_base
+try:
+    from sqlalchemy.ext.asyncio import (
+        AsyncEngine,
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
+except ImportError:
+    AsyncEngine = None  # type: ignore
+    AsyncSession = None  # type: ignore
+    async_sessionmaker = None  # type: ignore
+    create_async_engine = None  # type: ignore
+
+try:
+    from sqlalchemy.orm import declarative_base
+    Base = declarative_base()
+except ImportError:
+    Base = object  # type: ignore
 
 from app.core.config import settings
 
 logger = logging.getLogger("trustguard.database")
-
-Base = declarative_base()
 
 # Global connection singletons
 supabase_client = None
@@ -102,7 +111,7 @@ def init_database() -> None:
 
     # 2. SQLAlchemy Async Engine Initialization (if direct DB URL is provided)
     db_url = get_postgres_async_url()
-    if db_url:
+    if db_url and create_async_engine is not None:
         try:
             async_engine = create_async_engine(
                 db_url,

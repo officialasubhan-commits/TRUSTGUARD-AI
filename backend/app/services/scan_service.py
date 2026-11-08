@@ -135,8 +135,8 @@ class ScanService:
                 raw_url=raw_url,
             )
             t_ms = (time.perf_counter() - t0) * 1000
-            prob = pred.phishing_probability if pred else 0.0
-            logger.info("[TIMING] ML phishing prediction: duration=%.2fms probability=%.4f", t_ms, prob)
+            prob = pred.phishing_probability if (pred and pred.phishing_probability is not None) else 0.0
+            logger.info("[TIMING] ML phishing prediction: duration=%.2fms probability=%s", t_ms, prob)
             return pred
 
         # Engine B: SSL/TLS Certificate Audit

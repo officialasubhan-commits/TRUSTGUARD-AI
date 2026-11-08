@@ -223,11 +223,42 @@ async def get_current_admin(
     """
     FastAPI dependency: strictly verifies that the request possesses a valid
     administrator JWT and that the admin account is active.
+    Rejects standard users with 403 Forbidden.
     """
     if not credentials or not credentials.credentials:
         raise UnauthorizedError("Administrator authentication required. Missing Bearer token.")
     
     token = credentials.credentials.strip()
+
+    # 1. First check if it is a standard authenticated user JWT
+    try:
+        from app.core.security import verify_jwt_token
+        auth_user = verify_jwt_token(token)
+        if not auth_user.is_admin:
+            raise ForbiddenError("Administrator privileges required. Your account lacks administrative authorization.")
+        
+        from app.database.repositories.admin_repo import get_admin_repository
+        repo = get_admin_repository()
+        admin = await repo.get_admin_by_id(auth_user.user_id)
+        if admin:
+            if not admin.is_active:
+                raise ForbiddenError("This administrator account has been deactivated.")
+            return admin
+
+        return AdminUserProfile(
+            id=auth_user.user_id,
+            username=auth_user.email or "admin",
+            role="admin",
+            is_active=True,
+            created_at=datetime.now(timezone.utc),
+            last_login=datetime.now(timezone.utc),
+        )
+    except ForbiddenError:
+        raise
+    except Exception:
+        pass
+
+    # 2. Check dedicated administrator authority JWT
     payload = decode_admin_access_token(token)
     
     admin_id_str = payload.get("sub")

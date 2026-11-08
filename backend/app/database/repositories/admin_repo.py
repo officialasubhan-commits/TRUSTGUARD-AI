@@ -714,6 +714,33 @@ class AdminRepository:
                             created_at=dt,
                         )
                     )
+
+                from app.database.repositories.report_repo import _mock_reports_store
+                if _mock_reports_store:
+                    for r in _mock_reports_store.values():
+                        st = (r.get("moderation_status") or "PENDING").upper()
+                        if status and st != status.upper():
+                            continue
+                        created = r.get("created_at")
+                        dt = created if isinstance(created, datetime) else (datetime.fromisoformat(str(created).replace("Z", "+00:00")) if created else datetime.now(timezone.utc))
+                        items.append(
+                            AdminReportListItem(
+                                id=r["id"] if isinstance(r["id"], uuid.UUID) else uuid.UUID(r["id"]),
+                                submitted_url=r["submitted_url"],
+                                domain=r.get("domain"),
+                                report_reason=r.get("report_reason") or r.get("threat_type") or "SUSPICIOUS_PHISHING",
+                                threat_type=r.get("threat_type"),
+                                target_brand=r.get("target_brand"),
+                                submitter_email=None,
+                                moderation_status=st,
+                                report_status=r.get("report_status") or "pending_review",
+                                verification_status=r.get("verification_status") or "unverified",
+                                upvotes=r.get("upvotes", 0),
+                                attachments_count=1 if r.get("evidence_url") else 0,
+                                created_at=dt,
+                            )
+                        )
+                        total += 1
                 total_pages = max(1, (total + page_size - 1) // page_size)
                 return PaginatedAdminReports(
                     items=items,

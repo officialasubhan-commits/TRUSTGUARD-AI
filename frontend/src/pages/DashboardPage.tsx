@@ -8,17 +8,22 @@ import {
   SecurityStatisticsGrid,
   ActivityChart,
   RecentActivityList,
+  UserCommunitySubmissions,
 } from '../components/dashboard';
 import { useAuth } from '../context/AuthContext';
 import { scanService } from '../services/scanService';
+import { communityService } from '../services/communityService';
 import { formatApiError } from '../services/api';
 import { ScanStatistics } from '../types/scan';
+import { CommunityReportUserItem } from '../types/community';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
 
   const [statistics, setStatistics] = useState<ScanStatistics | null>(null);
+  const [userReports, setUserReports] = useState<CommunityReportUserItem[]>([]);
+  const [totalUserReports, setTotalUserReports] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -26,16 +31,27 @@ export const DashboardPage: React.FC = () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const stats = await scanService.getStatistics(signal);
-      setStatistics(stats);
-    } catch (err: any) {
-      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
-        return;
+      const [statsResult, communityResult] = await Promise.allSettled([
+        scanService.getStatistics(signal),
+        communityService.getMyReports(1, 5, signal),
+      ]);
+
+      if (statsResult.status === 'fulfilled') {
+        setStatistics(statsResult.value);
+      } else {
+        const err = statsResult.reason;
+        if (err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
+          const formatted = formatApiError(err);
+          setErrorMessage(
+            formatted.message || 'Unable to retrieve your security scanning telemetry from the server.'
+          );
+        }
       }
-      const formatted = formatApiError(err);
-      setErrorMessage(
-        formatted.message || 'Unable to retrieve your security scanning telemetry from the server.'
-      );
+
+      if (communityResult.status === 'fulfilled') {
+        setUserReports(communityResult.value.items || []);
+        setTotalUserReports(communityResult.value.total || 0);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -86,9 +102,16 @@ export const DashboardPage: React.FC = () => {
           {/* Temporal Activity Chart */}
           <ActivityChart />
 
-          {/* Recent Activity List */}
+          {/* Recent Security Scans List */}
           <RecentActivityList
             recentScans={statistics?.recent_scans || []}
+            isLoading={isLoading}
+          />
+
+          {/* Community Threat Submissions & Status */}
+          <UserCommunitySubmissions
+            reports={userReports}
+            totalReports={totalUserReports}
             isLoading={isLoading}
           />
         </div>
