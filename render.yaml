@@ -12,6 +12,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: PYTHONPATH
+        value: "backend:."
       - key: APP_ENV
         value: production
       - key: APP_DEBUG
