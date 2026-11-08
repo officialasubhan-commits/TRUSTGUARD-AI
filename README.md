@@ -87,7 +87,6 @@ TrustGuard AI transforms web threat analysis from opaque guesswork into an expla
 
 ## 6. System Architecture
 
-```mermaid
 flowchart TD
     subgraph Client ["Frontend Client (React + Vite)"]
         UserBrowser["Public User Browser"]
@@ -130,7 +129,6 @@ flowchart TD
     DecisionEngine --> DB
     VTEngine --> VT
     PublicRouter --> GoogleOAuth
-```
 
 ---
 
