@@ -666,10 +666,12 @@ class ReportRepository:
                 )
                 items = [ReportRecord(r) for r in (res.data or [])]
                 total = res.count if res.count is not None else len(items)
-                # Also include mock store items for this user
+                # Also include mock store items matching criteria
                 if _mock_reports_store:
                     for mr in _mock_reports_store.values():
-                        if str(mr.get("user_id")) == str(user_id):
+                        mod_match = not moderation_status or (mr.get("moderation_status") or "").upper() == moderation_status.upper()
+                        cat_match = not category or (mr.get("report_reason") or "").lower() == category.lower() or (mr.get("category") or "").lower() == category.lower()
+                        if mod_match and cat_match:
                             items.append(ReportRecord(mr))
                             total += 1
 
