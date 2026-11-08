@@ -1,10 +1,24 @@
 const DEFAULT_PROD_API_URL = 'https://trustguard-ai-backend.onrender.com/api/v1';
 const DEFAULT_DEV_API_URL = 'http://localhost:8000/api/v1';
 
-export const API_BASE_URL: string = (
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD ? DEFAULT_PROD_API_URL : DEFAULT_DEV_API_URL)
-).replace(/\/+$/, '');
+function resolveApiBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  const rawUrl = envUrl || (import.meta.env.PROD ? DEFAULT_PROD_API_URL : DEFAULT_DEV_API_URL);
+  let cleaned = rawUrl.replace(/\/+$/, '');
+
+  // Normalize: ensure the API base URL has the /api/v1 prefix if missing
+  if (!cleaned.endsWith('/api/v1')) {
+    if (cleaned.endsWith('/api')) {
+      cleaned = `${cleaned}/v1`;
+    } else {
+      cleaned = `${cleaned}/api/v1`;
+    }
+  }
+
+  return cleaned;
+}
+
+export const API_BASE_URL: string = resolveApiBaseUrl();
 
 export const API_TIMEOUT: number = 30000; // 30 seconds for deep multi-engine security scans
 

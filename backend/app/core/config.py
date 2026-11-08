@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     # Application metadata                                                 #
     # ------------------------------------------------------------------ #
     APP_NAME: str = "TrustGuard AI"
-    APP_VERSION: str = "0.1.0"
-    APP_ENV: str = "development"  # development | staging | production
-    APP_DEBUG: bool = True  # Set False in production
+    APP_VERSION: str = "1.0.0"
+    APP_ENV: str = "production"  # development | staging | production
+    APP_DEBUG: bool = False  # Set False in production
 
     # ------------------------------------------------------------------ #
     # API routing                                                          #

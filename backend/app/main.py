@@ -72,7 +72,7 @@ def create_application() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_origin_regex=r"^https://.*\.vercel\.app$|^https://.*\.onrender\.com$",
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$|^https://.*\.onrender\.com$",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
@@ -159,6 +159,23 @@ def create_application() -> FastAPI:
         tags=["Health"],
     )
     async def root_health() -> HealthResponse:
+        return HealthResponse(
+            app_name=settings.APP_NAME,
+            app_version=settings.APP_VERSION,
+            status="healthy",
+            environment=settings.APP_ENV,
+            database=check_db_health(),
+        )
+
+    @app.get(
+        "/api/health",
+        response_model=HealthResponse,
+        summary="Legacy API Health Check",
+        description="Returns system status, version, and environment information for legacy monitoring.",
+        tags=["Health"],
+        include_in_schema=False,
+    )
+    async def legacy_api_health() -> HealthResponse:
         return HealthResponse(
             app_name=settings.APP_NAME,
             app_version=settings.APP_VERSION,
