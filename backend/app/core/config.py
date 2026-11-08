@@ -81,6 +81,13 @@ class Settings(BaseSettings):
         can run the frontend without touching this config.
         """
         origins = [o.strip() for o in self.FRONTEND_URL.split(",") if o.strip()]
+        # Always allow production and staging Vercel domains
+        prod_origins = [
+            "https://trustguard-ai.vercel.app",
+        ]
+        for po in prod_origins:
+            if po not in origins:
+                origins.append(po)
         # Always allow local dev origins so team members are unblocked
         if self.APP_ENV != "production":
             dev_origins = [

@@ -1,5 +1,10 @@
-export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const DEFAULT_PROD_API_URL = 'https://trustguard-ai-backend.onrender.com/api/v1';
+const DEFAULT_DEV_API_URL = 'http://localhost:8000/api/v1';
+
+export const API_BASE_URL: string = (
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? DEFAULT_PROD_API_URL : DEFAULT_DEV_API_URL)
+).replace(/\/+$/, '');
 
 export const API_TIMEOUT: number = 30000; // 30 seconds for deep multi-engine security scans
 
@@ -54,4 +59,3 @@ export const API_ENDPOINTS = {
     MODERATE: (id: string) => `/admin/community/reports/${id}`,
   },
 } as const;
-

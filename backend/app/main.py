@@ -72,9 +72,11 @@ def create_application() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=r"^https://.*\.vercel\.app$|^https://.*\.onrender\.com$",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
+        expose_headers=["*"],
     )
 
     # Server-side Maintenance Mode Enforcement Middleware
