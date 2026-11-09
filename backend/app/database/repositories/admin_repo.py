@@ -27,13 +27,26 @@ from app.schemas.admin import (
     AdminAuditLogItem,
     AdminReportDetail,
     AdminReportListItem,
+    AdminScanItem,
     AdminUserDetail,
     AdminUserListItem,
     AdminUserProfile,
+    ContributorCreate,
+    ContributorItem,
+    ContributorReorderItem,
+    ContributorsPageConfig,
+    ContributorsPageConfigUpdate,
+    ContributorUpdate,
     MaintenanceConfig,
     PaginatedAdminAuditLogs,
     PaginatedAdminReports,
+    PaginatedAdminScans,
     PaginatedAdminUsers,
+    SystemSettingsConfig,
+    SystemSettingsUpdate,
+    WebsitePageCreate,
+    WebsitePageItem,
+    WebsitePageUpdate,
 )
 
 import json
@@ -41,13 +54,13 @@ from pathlib import Path
 
 logger = logging.getLogger("trustguard.repo.admin")
 
-_LOCAL_STORE_PATH = Path(__file__).resolve().parent.parent / "local_admin_store.json"
+_LOCAL_STORE_PATH = Path(__file__).resolve().parent.parent / "admin_store.json"
 
 _DEFAULT_ADMIN_ID = uuid.UUID("a2107163-49cd-4486-b982-edef1b495a58")
 _DEFAULT_ADMIN_RECORD: Dict[str, Any] = {
     "id": str(_DEFAULT_ADMIN_ID),
     "username": "admin",
-    "password_hash": "scrypt$16384$8$1$107afd49bedf659b6f5414e83028c958$dcb46554c22e5f8560dabf07cf2652a197d404746105a22d60acbdcf3c88610b9f71c7c9a37eab266f6163fdf590bb86677d383303177ce8aff98521451184ba",
+    "password_hash": "scrypt$16384$8$1$f79f60ae1601facf6f7be1d48a90bcde$b3d6bc81b3b08156784f3778e0f48572fd871b07a17ebb993fb1af6b39d6ab2968c1c0ff2f135df56596872951bdaaa24f482b013a51a4f95024acc73cf5bf17",
     "email": "admin@trustguard.ai",
     "full_name": "Security Administrator",
     "role": "super_admin",
@@ -63,6 +76,8 @@ _DEFAULT_ADMIN_RECORD: Dict[str, Any] = {
 # In-memory stores for isolated fallback
 _mock_admin_users: Dict[uuid.UUID, Dict[str, Any]] = {}
 _mock_audit_logs: List[Dict[str, Any]] = []
+_mock_contributors: Dict[str, Dict[str, Any]] = {}
+_mock_website_pages: Dict[str, Dict[str, Any]] = {}
 _mock_system_settings: Dict[str, Dict[str, Any]] = {
     "maintenance_config": {
         "maintenance_enabled": False,
@@ -71,24 +86,52 @@ _mock_system_settings: Dict[str, Dict[str, Any]] = {
         "internal_reason": "System operating normally.",
         "updated_by": "system",
         "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    },
+    "contributors_page_config": {
+        "title": "Project Contributors",
+        "subtitle": "The core developers, security researchers, and contributors powering TrustGuard AI.",
+        "header_banner_url": None,
+        "is_published": True,
+        "show_in_navigation": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    },
+    "general_settings": {
+        "site_name": "TrustGuard AI",
+        "site_tagline": "AI-Powered Phishing & Scam URL Detection",
+        "site_description": "Next-generation URL threat intelligence and automated cyber fraud protection.",
+        "logo_url": None,
+        "favicon_url": None,
+        "announcement_enabled": False,
+        "announcement_message": "TrustGuard AI 2.0 Released: Real-time ML inspection and community threat feed is live.",
+        "announcement_type": "info",
+        "announcement_link": None,
+        "allow_registration": True,
+        "allow_guest_scans": True,
+        "allow_community_reports": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    },
 }
 
 
 def _ensure_default_admin():
     """Guarantees the root administrator exists across all environments (including Render/offline)."""
     global _mock_admin_users
-    has_admin = any(
-        u.get("username", "").lower() == "admin"
-        or (u.get("email") and u.get("email", "").lower() == "admin@trustguard.ai")
-        for u in _mock_admin_users.values()
-    )
-    if not has_admin:
+    admin_entry = None
+    for u in _mock_admin_users.values():
+        if u.get("username", "").lower() == "admin" or (u.get("email") and u.get("email", "").lower() == "admin@trustguard.ai"):
+            admin_entry = u
+            break
+    if not admin_entry:
         _mock_admin_users[_DEFAULT_ADMIN_ID] = dict(_DEFAULT_ADMIN_RECORD)
+    else:
+        # Ensure default admin always has the latest valid credentials and active status
+        if admin_entry.get("password_hash", "").startswith("scrypt$16384$8$1$107afd49bedf"):
+            admin_entry["password_hash"] = _DEFAULT_ADMIN_RECORD["password_hash"]
+        admin_entry["is_active"] = True
 
 
 def _load_local_store():
-    global _mock_admin_users, _mock_audit_logs, _mock_system_settings
+    global _mock_admin_users, _mock_audit_logs, _mock_system_settings, _mock_contributors, _mock_website_pages
     if _LOCAL_STORE_PATH.exists():
         try:
             with open(_LOCAL_STORE_PATH, "r", encoding="utf-8") as f:
@@ -99,6 +142,10 @@ def _load_local_store():
                     _mock_audit_logs = data["audit_logs"]
                 if "system_settings" in data:
                     _mock_system_settings.update(data["system_settings"])
+                if "contributors" in data:
+                    _mock_contributors = data["contributors"]
+                if "website_pages" in data:
+                    _mock_website_pages = data["website_pages"]
         except Exception as e:
             logger.debug("Failed reading local admin store: %s", e)
     _ensure_default_admin()
@@ -110,6 +157,8 @@ def _save_local_store():
             "admin_users": {str(k): v for k, v in _mock_admin_users.items()},
             "audit_logs": _mock_audit_logs[:500],
             "system_settings": _mock_system_settings,
+            "contributors": _mock_contributors,
+            "website_pages": _mock_website_pages,
         }
         with open(_LOCAL_STORE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -461,7 +510,7 @@ class AdminRepository:
     # 4. Platform Overview Statistics
     # -------------------------------------------------------------------------
     async def get_platform_stats(self) -> Dict[str, Any]:
-        """Calculates real platform metrics across users, scans, and reports."""
+        """Calculates real platform metrics across users, scans, reports, contributors, and pages."""
         cli = self.client
         stats = {
             "total_users": 0,
@@ -473,6 +522,12 @@ class AdminRepository:
             "rejected_reports": 0,
             "resolved_reports": 0,
             "high_risk_urls": 0,
+            "safe_scans": 0,
+            "suspicious_scans": 0,
+            "malicious_scans": 0,
+            "total_contributors": len(_mock_contributors),
+            "published_pages": sum(1 for p in _mock_website_pages.values() if p.get("is_published", True)),
+            "system_status": "healthy",
         }
 
         if cli is not None:
@@ -484,14 +539,22 @@ class AdminRepository:
                 stats["total_users"] = u_res.count or len(u_res.data)
                 stats["active_users"] = sum(1 for u in u_res.data if u.get("is_active", True))
 
-                # Count scans
+                # Count scans & classifications
                 s_res = await asyncio.to_thread(
                     lambda: cli.table("scan_history").select("id, risk_level", count="exact").execute()
                 )
                 stats["total_scans"] = s_res.count or len(s_res.data)
-                stats["high_risk_urls"] = sum(
-                    1 for s in s_res.data if s.get("risk_level") in ("HIGH", "CRITICAL", "HIGH_RISK", "CRITICAL_RISK")
-                )
+                for s in s_res.data:
+                    rk = str(s.get("risk_level", "")).upper()
+                    if rk in ("SAFE", "LOW", "CLEAN"):
+                        stats["safe_scans"] += 1
+                    elif rk in ("SUSPICIOUS", "MEDIUM", "MODERATE"):
+                        stats["suspicious_scans"] += 1
+                    elif rk in ("MALICIOUS", "HIGH", "CRITICAL", "HIGH_RISK", "CRITICAL_RISK"):
+                        stats["malicious_scans"] += 1
+                        stats["high_risk_urls"] += 1
+                    else:
+                        stats["safe_scans"] += 1
 
                 # Count community reports
                 r_res = await asyncio.to_thread(
@@ -509,6 +572,15 @@ class AdminRepository:
                     elif mod in ("RESOLVED",):
                         stats["resolved_reports"] += 1
 
+                # Contributors & Pages if tables exist in PostgREST
+                if connection.is_table_available("contributors"):
+                    c_res = await asyncio.to_thread(lambda: cli.table("contributors").select("id", count="exact").execute())
+                    stats["total_contributors"] = c_res.count or len(c_res.data)
+
+                if connection.is_table_available("website_pages"):
+                    p_res = await asyncio.to_thread(lambda: cli.table("website_pages").select("id").eq("is_published", True).execute())
+                    stats["published_pages"] = len(p_res.data)
+
                 return stats
             except Exception as e:
                 logger.warning("Supabase get platform stats failed, using fallback counts: %s", e)
@@ -521,9 +593,18 @@ class AdminRepository:
         stats["total_users"] = len(_mock_users_store)
         stats["active_users"] = sum(1 for u in _mock_users_store.values() if u.get("is_active", True))
         stats["total_scans"] = len(_mock_scans_store)
-        stats["high_risk_urls"] = sum(
-            1 for s in _mock_scans_store.values() if s.get("risk_level") in ("HIGH", "CRITICAL")
-        )
+        for s in _mock_scans_store.values():
+            rk = str(s.get("risk_level", "")).upper()
+            if rk in ("SAFE", "LOW"):
+                stats["safe_scans"] += 1
+            elif rk in ("SUSPICIOUS", "MEDIUM"):
+                stats["suspicious_scans"] += 1
+            elif rk in ("MALICIOUS", "HIGH", "CRITICAL"):
+                stats["malicious_scans"] += 1
+                stats["high_risk_urls"] += 1
+            else:
+                stats["safe_scans"] += 1
+
         stats["total_community_reports"] = len(_mock_reports_store)
         for r in _mock_reports_store.values():
             st = r.get("moderation_status", "PENDING").upper()
@@ -536,6 +617,8 @@ class AdminRepository:
             elif st == "RESOLVED":
                 stats["resolved_reports"] += 1
 
+        stats["total_contributors"] = len(_mock_contributors)
+        stats["published_pages"] = sum(1 for p in _mock_website_pages.values() if p.get("is_published", True))
         return stats
 
     # -------------------------------------------------------------------------
@@ -698,6 +781,106 @@ class AdminRepository:
         if user_id in _mock_users_store:
             _mock_users_store[user_id]["is_active"] = is_active
             _mock_users_store[user_id]["updated_at"] = now
+            return True
+        return False
+
+    async def update_user_profile(
+        self,
+        user_id: uuid.UUID,
+        full_name: Optional[str] = None,
+        role: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> bool:
+        """Updates user profile attributes."""
+        now = datetime.now(timezone.utc).isoformat()
+        updates: Dict[str, Any] = {"updated_at": now}
+        if full_name is not None:
+            updates["full_name"] = full_name.strip()
+        if is_active is not None:
+            updates["is_active"] = is_active
+        if role is not None:
+            updates["role"] = role
+
+        cli = self.client
+        if cli is not None:
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("users").update(updates).eq("id", str(user_id)).execute()
+                )
+                if res.data:
+                    return True
+            except Exception as e:
+                logger.debug("Supabase update user profile failed, fallback: %s", e)
+
+        from app.database.repositories.user_repo import _mock_users_store
+        if user_id in _mock_users_store:
+            _mock_users_store[user_id].update(updates)
+            return True
+        return False
+
+    async def update_user_email(self, user_id: uuid.UUID, new_email: str) -> bool:
+        """Securely changes a registered user's email address via Supabase Auth and public.users."""
+        now = datetime.now(timezone.utc).isoformat()
+        clean_email = new_email.strip().lower()
+
+        # Update Supabase Auth if available
+        if connection.supabase_client is not None and settings.supabase_configured:
+            try:
+                admin_auth = getattr(connection.supabase_client, "auth", None)
+                if admin_auth and hasattr(admin_auth, "admin"):
+                    await asyncio.to_thread(
+                        lambda: admin_auth.admin.update_user_by_id(
+                            str(user_id),
+                            {"email": clean_email, "email_confirm": True}
+                        )
+                    )
+            except Exception as auth_err:
+                logger.warning("Supabase Auth admin email update warning: %s", auth_err)
+
+        cli = self.client
+        if cli is not None:
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("users").update({"email": clean_email, "updated_at": now}).eq("id", str(user_id)).execute()
+                )
+                if res.data:
+                    return True
+            except Exception as e:
+                logger.debug("Supabase update user email failed, fallback: %s", e)
+
+        from app.database.repositories.user_repo import _mock_users_store
+        if user_id in _mock_users_store:
+            _mock_users_store[user_id]["email"] = clean_email
+            _mock_users_store[user_id]["updated_at"] = now
+            return True
+        return False
+
+    async def delete_user_account(self, user_id: uuid.UUID) -> bool:
+        """Permanently and safely deletes a registered user account and cleans up records."""
+        # Delete from Supabase Auth
+        if connection.supabase_client is not None and settings.supabase_configured:
+            try:
+                admin_auth = getattr(connection.supabase_client, "auth", None)
+                if admin_auth and hasattr(admin_auth, "admin"):
+                    await asyncio.to_thread(
+                        lambda: admin_auth.admin.delete_user(str(user_id))
+                    )
+            except Exception as auth_err:
+                logger.warning("Supabase Auth admin delete_user warning: %s", auth_err)
+
+        cli = self.client
+        if cli is not None:
+            try:
+                await asyncio.to_thread(
+                    lambda: cli.table("users").delete().eq("id", str(user_id)).execute()
+                )
+                return True
+            except Exception as e:
+                logger.debug("Supabase delete user profile failed, fallback: %s", e)
+
+        from app.database.repositories.user_repo import _mock_users_store
+        if user_id in _mock_users_store:
+            del _mock_users_store[user_id]
             return True
         return False
 
@@ -1034,6 +1217,515 @@ class AdminRepository:
             _mock_reports_store[report_id].update(updates)
             return True
         return False
+
+    # -------------------------------------------------------------------------
+    # 7. Contributors Management
+    # -------------------------------------------------------------------------
+    async def get_contributors(self, include_inactive: bool = False) -> List[ContributorItem]:
+        """Returns list of contributors sorted by display_order."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                query = cli.table("contributors").select("*")
+                if not include_inactive:
+                    query = query.eq("is_active", True)
+                res = await asyncio.to_thread(lambda: query.order("display_order", desc=False).execute())
+                return [ContributorItem.model_validate(c) for c in (res.data or [])]
+            except Exception as e:
+                logger.debug("Supabase get contributors failed, fallback: %s", e)
+
+        items = list(_mock_contributors.values())
+        if not include_inactive:
+            items = [c for c in items if c.get("is_active", True)]
+        items.sort(key=lambda x: x.get("display_order", 0))
+        return [ContributorItem.model_validate(c) for c in items]
+
+    async def get_contributor(self, contributor_id: str) -> Optional[ContributorItem]:
+        """Gets a single contributor by ID."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("contributors").select("*").eq("id", contributor_id).limit(1).execute()
+                )
+                if res.data:
+                    return ContributorItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase get contributor failed, fallback: %s", e)
+
+        c = _mock_contributors.get(contributor_id)
+        return ContributorItem.model_validate(c) if c else None
+
+    async def create_contributor(self, data: ContributorCreate) -> ContributorItem:
+        """Creates a new contributor record."""
+        now = datetime.now(timezone.utc).isoformat()
+        new_id = f"contributor-{uuid.uuid4().hex[:8]}"
+        record = {
+            "id": new_id,
+            "name": data.name.strip(),
+            "role": data.role.strip(),
+            "bio": data.bio.strip() if data.bio else None,
+            "avatar_url": data.avatar_url,
+            "social_links": data.social_links.model_dump(),
+            "display_order": data.display_order,
+            "is_active": data.is_active,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("contributors").insert(record).execute()
+                )
+                if res.data:
+                    return ContributorItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase insert contributor failed, fallback: %s", e)
+
+        _mock_contributors[new_id] = record
+        _save_local_store()
+        return ContributorItem.model_validate(record)
+
+    async def update_contributor(self, contributor_id: str, data: ContributorUpdate) -> Optional[ContributorItem]:
+        """Updates an existing contributor record."""
+        now = datetime.now(timezone.utc).isoformat()
+        updates: Dict[str, Any] = {"updated_at": now}
+        if data.name is not None:
+            updates["name"] = data.name.strip()
+        if data.role is not None:
+            updates["role"] = data.role.strip()
+        if data.bio is not None:
+            updates["bio"] = data.bio.strip()
+        if data.avatar_url is not None:
+            updates["avatar_url"] = data.avatar_url
+        if data.social_links is not None:
+            updates["social_links"] = data.social_links.model_dump()
+        if data.display_order is not None:
+            updates["display_order"] = data.display_order
+        if data.is_active is not None:
+            updates["is_active"] = data.is_active
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("contributors").update(updates).eq("id", contributor_id).execute()
+                )
+                if res.data:
+                    return ContributorItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase update contributor failed, fallback: %s", e)
+
+        if contributor_id in _mock_contributors:
+            _mock_contributors[contributor_id].update(updates)
+            _save_local_store()
+            return ContributorItem.model_validate(_mock_contributors[contributor_id])
+        return None
+
+    async def delete_contributor(self, contributor_id: str) -> bool:
+        """Deletes a contributor."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                await asyncio.to_thread(
+                    lambda: cli.table("contributors").delete().eq("id", contributor_id).execute()
+                )
+                return True
+            except Exception as e:
+                logger.debug("Supabase delete contributor failed, fallback: %s", e)
+
+        if contributor_id in _mock_contributors:
+            del _mock_contributors[contributor_id]
+            _save_local_store()
+            return True
+        return False
+
+    async def reorder_contributors(self, items: List[ContributorReorderItem]) -> bool:
+        """Updates display_order for multiple contributors."""
+        for item in items:
+            if item.id in _mock_contributors:
+                _mock_contributors[item.id]["display_order"] = item.display_order
+        _save_local_store()
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("contributors"):
+            try:
+                for item in items:
+                    await asyncio.to_thread(
+                        lambda i=item: cli.table("contributors").update({"display_order": i.display_order}).eq("id", i.id).execute()
+                    )
+            except Exception as e:
+                logger.debug("Supabase reorder contributors failed: %s", e)
+        return True
+
+    async def get_contributors_page_config(self) -> ContributorsPageConfig:
+        """Retrieves settings for the Contributors public page."""
+        raw = _mock_system_settings.get("contributors_page_config", {})
+        return ContributorsPageConfig.model_validate(raw)
+
+    async def update_contributors_page_config(self, data: ContributorsPageConfigUpdate) -> ContributorsPageConfig:
+        """Updates settings for the Contributors public page."""
+        now = datetime.now(timezone.utc).isoformat()
+        current = _mock_system_settings.get("contributors_page_config", {
+            "title": "Project Contributors",
+            "subtitle": "The core developers, security researchers, and contributors powering TrustGuard AI.",
+            "header_banner_url": None,
+            "is_published": True,
+            "show_in_navigation": True,
+        })
+        if data.title is not None:
+            current["title"] = data.title.strip()
+        if data.subtitle is not None:
+            current["subtitle"] = data.subtitle.strip()
+        if data.header_banner_url is not None:
+            current["header_banner_url"] = data.header_banner_url
+        if data.is_published is not None:
+            current["is_published"] = data.is_published
+        if data.show_in_navigation is not None:
+            current["show_in_navigation"] = data.show_in_navigation
+        current["updated_at"] = now
+
+        _mock_system_settings["contributors_page_config"] = current
+        _save_local_store()
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("system_settings"):
+            try:
+                await asyncio.to_thread(
+                    lambda: cli.table("system_settings").upsert({
+                        "key": "contributors_page_config",
+                        "value": current,
+                        "updated_by": "admin",
+                        "updated_at": now,
+                    }).execute()
+                )
+            except Exception as e:
+                logger.debug("Supabase upsert contributors_page_config failed: %s", e)
+
+        return ContributorsPageConfig.model_validate(current)
+
+    # -------------------------------------------------------------------------
+    # 8. Dynamic Pages (CMS) Management
+    # -------------------------------------------------------------------------
+    async def get_pages(self, include_unpublished: bool = False) -> List[WebsitePageItem]:
+        """Lists dynamic CMS pages."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                query = cli.table("website_pages").select("*")
+                if not include_unpublished:
+                    query = query.eq("is_published", True)
+                res = await asyncio.to_thread(lambda: query.order("nav_order", desc=False).execute())
+                return [WebsitePageItem.model_validate(p) for p in (res.data or [])]
+            except Exception as e:
+                logger.debug("Supabase get website_pages failed, fallback: %s", e)
+
+        pages = list(_mock_website_pages.values())
+        if not include_unpublished:
+            pages = [p for p in pages if p.get("is_published", True)]
+        pages.sort(key=lambda x: x.get("nav_order", 0))
+        return [WebsitePageItem.model_validate(p) for p in pages]
+
+    async def get_page_by_id(self, page_id: str) -> Optional[WebsitePageItem]:
+        """Gets a page by ID."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("website_pages").select("*").eq("id", page_id).limit(1).execute()
+                )
+                if res.data:
+                    return WebsitePageItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase get page by ID failed, fallback: %s", e)
+
+        p = _mock_website_pages.get(page_id)
+        return WebsitePageItem.model_validate(p) if p else None
+
+    async def get_page_by_slug(self, slug: str) -> Optional[WebsitePageItem]:
+        """Gets a published page by URL slug."""
+        clean_slug = slug.strip().lower().lstrip("/")
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("website_pages").select("*").eq("slug", clean_slug).limit(1).execute()
+                )
+                if res.data:
+                    return WebsitePageItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase get page by slug failed, fallback: %s", e)
+
+        for p in _mock_website_pages.values():
+            if p.get("slug", "").lower() == clean_slug:
+                return WebsitePageItem.model_validate(p)
+        return None
+
+    async def create_page(self, data: WebsitePageCreate) -> WebsitePageItem:
+        """Creates a new CMS page."""
+        now = datetime.now(timezone.utc).isoformat()
+        new_id = f"page-{uuid.uuid4().hex[:8]}"
+        clean_slug = data.slug.strip().lower().lstrip("/")
+        record = {
+            "id": new_id,
+            "title": data.title.strip(),
+            "slug": clean_slug,
+            "content": data.content,
+            "meta_description": data.meta_description.strip() if data.meta_description else None,
+            "is_published": data.is_published,
+            "show_in_navigation": data.show_in_navigation,
+            "nav_order": data.nav_order,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("website_pages").insert(record).execute()
+                )
+                if res.data:
+                    return WebsitePageItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase insert website_pages failed, fallback: %s", e)
+
+        _mock_website_pages[new_id] = record
+        _save_local_store()
+        return WebsitePageItem.model_validate(record)
+
+    async def update_page(self, page_id: str, data: WebsitePageUpdate) -> Optional[WebsitePageItem]:
+        """Updates a CMS page."""
+        now = datetime.now(timezone.utc).isoformat()
+        updates: Dict[str, Any] = {"updated_at": now}
+        if data.title is not None:
+            updates["title"] = data.title.strip()
+        if data.slug is not None:
+            updates["slug"] = data.slug.strip().lower().lstrip("/")
+        if data.content is not None:
+            updates["content"] = data.content
+        if data.meta_description is not None:
+            updates["meta_description"] = data.meta_description.strip()
+        if data.is_published is not None:
+            updates["is_published"] = data.is_published
+        if data.show_in_navigation is not None:
+            updates["show_in_navigation"] = data.show_in_navigation
+        if data.nav_order is not None:
+            updates["nav_order"] = data.nav_order
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("website_pages").update(updates).eq("id", page_id).execute()
+                )
+                if res.data:
+                    return WebsitePageItem.model_validate(res.data[0])
+            except Exception as e:
+                logger.debug("Supabase update website_pages failed, fallback: %s", e)
+
+        if page_id in _mock_website_pages:
+            _mock_website_pages[page_id].update(updates)
+            _save_local_store()
+            return WebsitePageItem.model_validate(_mock_website_pages[page_id])
+        return None
+
+    async def delete_page(self, page_id: str) -> bool:
+        """Deletes a CMS page."""
+        cli = self.client
+        if cli is not None and connection.is_table_available("website_pages"):
+            try:
+                await asyncio.to_thread(
+                    lambda: cli.table("website_pages").delete().eq("id", page_id).execute()
+                )
+                return True
+            except Exception as e:
+                logger.debug("Supabase delete website_pages failed, fallback: %s", e)
+
+        if page_id in _mock_website_pages:
+            del _mock_website_pages[page_id]
+            _save_local_store()
+            return True
+        return False
+
+    # -------------------------------------------------------------------------
+    # 9. Scans Management
+    # -------------------------------------------------------------------------
+    async def get_scans_list(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search: Optional[str] = None,
+        classification: Optional[str] = None,
+    ) -> PaginatedAdminScans:
+        """Retrieves website scans across the platform with filtering."""
+        cli = self.client
+        if cli is not None:
+            try:
+                query = cli.table("scan_history").select("*", count="exact")
+                if classification:
+                    c_clean = classification.strip().upper()
+                    if c_clean == "SAFE":
+                        query = query.in_("risk_level", ["SAFE", "LOW", "CLEAN"])
+                    elif c_clean == "SUSPICIOUS":
+                        query = query.in_("risk_level", ["SUSPICIOUS", "MEDIUM", "MODERATE"])
+                    elif c_clean == "MALICIOUS":
+                        query = query.in_("risk_level", ["MALICIOUS", "HIGH", "CRITICAL", "HIGH_RISK", "CRITICAL_RISK"])
+                if search:
+                    s_clean = search.strip()
+                    query = query.or_(f"submitted_url.ilike.%{s_clean}%,domain.ilike.%{s_clean}%")
+
+                offset = (page - 1) * page_size
+                res = await asyncio.to_thread(
+                    lambda: query.order("created_at", desc=True).range(offset, offset + page_size - 1).execute()
+                )
+                total = res.count or len(res.data)
+                items = []
+                for s in (res.data or []):
+                    rk = str(s.get("risk_level", "SAFE")).upper()
+                    items.append(
+                        AdminScanItem(
+                            id=str(s["id"]),
+                            url=s.get("submitted_url", ""),
+                            domain=s.get("domain"),
+                            classification=rk,
+                            trust_score=float(s.get("trust_score", 0.0) or 0.0),
+                            is_malicious=rk in ("MALICIOUS", "HIGH", "CRITICAL", "HIGH_RISK", "CRITICAL_RISK"),
+                            user_id=str(s.get("user_id")) if s.get("user_id") else None,
+                            user_email=None,
+                            ip_address=s.get("ip_address"),
+                            scanned_at=datetime.fromisoformat(s["created_at"].replace("Z", "+00:00")),
+                            details=s.get("preliminary_analysis"),
+                        )
+                    )
+                total_pages = max(1, (total + page_size - 1) // page_size)
+                return PaginatedAdminScans(
+                    items=items,
+                    total=total,
+                    page=page,
+                    page_size=page_size,
+                    total_pages=total_pages,
+                )
+            except Exception as e:
+                logger.debug("Supabase get scans list failed, using fallback: %s", e)
+
+        from app.database.repositories.scan_repo import _mock_scans_store
+        scans = list(_mock_scans_store.values())
+        if classification:
+            c_clean = classification.strip().upper()
+            scans = [s for s in scans if str(s.get("risk_level", "")).upper() == c_clean]
+        if search:
+            s_clean = search.strip().lower()
+            scans = [s for s in scans if s_clean in s.get("submitted_url", "").lower() or s_clean in str(s.get("domain", "")).lower()]
+
+        scans.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        total = len(scans)
+        offset = (page - 1) * page_size
+        paged = scans[offset : offset + page_size]
+        items = [
+            AdminScanItem(
+                id=str(s.get("id", uuid.uuid4())),
+                url=s.get("submitted_url", ""),
+                domain=s.get("domain"),
+                classification=str(s.get("risk_level", "SAFE")).upper(),
+                trust_score=float(s.get("trust_score", 0.0) or 0.0),
+                is_malicious=str(s.get("risk_level", "")).upper() in ("MALICIOUS", "HIGH", "CRITICAL"),
+                user_id=str(s.get("user_id")) if s.get("user_id") else None,
+                user_email=None,
+                ip_address=s.get("ip_address"),
+                scanned_at=s.get("created_at") if isinstance(s.get("created_at"), datetime) else datetime.now(timezone.utc),
+                details=s.get("preliminary_analysis"),
+            )
+            for s in paged
+        ]
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        return PaginatedAdminScans(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+        )
+
+    async def get_scan_detail(self, scan_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves detailed scan metrics and security analysis."""
+        cli = self.client
+        if cli is not None:
+            try:
+                res = await asyncio.to_thread(
+                    lambda: cli.table("scan_history").select("*").eq("id", scan_id).limit(1).execute()
+                )
+                if res.data:
+                    return res.data[0]
+            except Exception as e:
+                logger.debug("Supabase get scan detail failed, fallback: %s", e)
+
+        from app.database.repositories.scan_repo import _mock_scans_store
+        return _mock_scans_store.get(scan_id)
+
+    # -------------------------------------------------------------------------
+    # 10. General System Settings
+    # -------------------------------------------------------------------------
+    async def get_system_settings(self) -> SystemSettingsConfig:
+        """Retrieves global system configuration and branding."""
+        raw = _mock_system_settings.get("general_settings", {
+            "site_name": "TrustGuard AI",
+            "site_tagline": "AI-Powered Phishing & Scam URL Detection",
+            "site_description": "Next-generation URL threat intelligence and automated cyber fraud protection.",
+            "logo_url": None,
+            "favicon_url": None,
+            "announcement_enabled": False,
+            "announcement_message": "TrustGuard AI 2.0 Released: Real-time ML inspection and community threat feed is live.",
+            "announcement_type": "info",
+            "announcement_link": None,
+            "allow_registration": True,
+            "allow_guest_scans": True,
+            "allow_community_reports": True,
+        })
+        return SystemSettingsConfig.model_validate(raw)
+
+    async def update_system_settings(self, data: SystemSettingsUpdate) -> SystemSettingsConfig:
+        """Updates global system configuration and branding."""
+        now = datetime.now(timezone.utc).isoformat()
+        current = _mock_system_settings.get("general_settings", {
+            "site_name": "TrustGuard AI",
+            "site_tagline": "AI-Powered Phishing & Scam URL Detection",
+            "site_description": "Next-generation URL threat intelligence and automated cyber fraud protection.",
+            "logo_url": None,
+            "favicon_url": None,
+            "announcement_enabled": False,
+            "announcement_message": "TrustGuard AI 2.0 Released: Real-time ML inspection and community threat feed is live.",
+            "announcement_type": "info",
+            "announcement_link": None,
+            "allow_registration": True,
+            "allow_guest_scans": True,
+            "allow_community_reports": True,
+        })
+        for k, v in data.model_dump(exclude_unset=True).items():
+            if v is not None:
+                current[k] = v
+        current["updated_at"] = now
+
+        _mock_system_settings["general_settings"] = current
+        _save_local_store()
+
+        cli = self.client
+        if cli is not None and connection.is_table_available("system_settings"):
+            try:
+                await asyncio.to_thread(
+                    lambda: cli.table("system_settings").upsert({
+                        "key": "general_settings",
+                        "value": current,
+                        "updated_by": "admin",
+                        "updated_at": now,
+                    }).execute()
+                )
+            except Exception as e:
+                logger.debug("Supabase upsert general_settings failed: %s", e)
+
+        return SystemSettingsConfig.model_validate(current)
 
 
 _admin_repo_instance: Optional[AdminRepository] = None

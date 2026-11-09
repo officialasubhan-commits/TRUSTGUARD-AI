@@ -488,8 +488,53 @@ CREATE POLICY "Service role manages system_settings"
     USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
+-- 10. CONTRIBUTORS & CMS DYNAMIC PAGES
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.contributors (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    role VARCHAR(120) NOT NULL,
+    bio TEXT,
+    avatar_url TEXT,
+    social_links JSONB DEFAULT '{}'::jsonb,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.website_pages (
+    id VARCHAR(64) PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    content TEXT NOT NULL,
+    meta_description TEXT,
+    is_published BOOLEAN NOT NULL DEFAULT true,
+    show_in_navigation BOOLEAN NOT NULL DEFAULT false,
+    nav_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contributors_order ON public.contributors(display_order);
+CREATE INDEX IF NOT EXISTS idx_contributors_active ON public.contributors(is_active);
+CREATE INDEX IF NOT EXISTS idx_website_pages_slug ON public.website_pages(slug);
+CREATE INDEX IF NOT EXISTS idx_website_pages_published ON public.website_pages(is_published);
+
+ALTER TABLE public.contributors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.website_pages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role manages contributors" ON public.contributors FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role manages website_pages" ON public.website_pages FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read active contributors" ON public.contributors FOR SELECT TO anon, authenticated USING (is_active = true);
+CREATE POLICY "Public read published pages" ON public.website_pages FOR SELECT TO anon, authenticated USING (is_published = true);
+CREATE POLICY "Public read general settings" ON public.system_settings FOR SELECT TO anon, authenticated USING (key IN ('maintenance_config', 'contributors_page_config', 'general_settings'));
+
+-- ------------------------------------------------------------------------------
 -- 11. REFRESH POSTGREST SCHEMA CACHE
 -- ------------------------------------------------------------------------------
 NOTIFY pgrst, 'reload schema';
+
 
 

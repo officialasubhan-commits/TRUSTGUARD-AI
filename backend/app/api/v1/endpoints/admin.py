@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.core.admin_security import get_current_admin
+from app.core.admin_security import get_current_admin, require_admin_role
 from app.schemas.admin import (
     AdminAuditLogItem,
     AdminBulkModerationRequest,
@@ -33,17 +33,35 @@ from app.schemas.admin import (
     AdminReportDetail,
     AdminReportListItem,
     AdminReportModerationAction,
+    AdminScanItem,
     AdminThreatIntelSummary,
     AdminTokenResponse,
+    AdminUserDeleteRequest,
     AdminUserDetail,
+    AdminUserEmailChangeRequest,
+    AdminUserListItem,
     AdminUserProfile,
     AdminUserStatusUpdate,
+    AdminUserUpdateRequest,
+    BulkModerationDetail,
+    ContributorCreate,
+    ContributorItem,
+    ContributorReorderItem,
+    ContributorsPageConfig,
+    ContributorsPageConfigUpdate,
+    ContributorUpdate,
     MaintenanceConfig,
     MaintenanceUpdateRequest,
     PaginatedAdminAuditLogs,
     PaginatedAdminReports,
+    PaginatedAdminScans,
     PaginatedAdminUsers,
     SystemHealthResponse,
+    SystemSettingsConfig,
+    SystemSettingsUpdate,
+    WebsitePageCreate,
+    WebsitePageItem,
+    WebsitePageUpdate,
 )
 from app.schemas.report import CommunityReportModerationUpdate
 from app.services.admin_service import AdminService, get_admin_service
@@ -207,6 +225,54 @@ async def admin_restore_user(
     client_ip = request.client.host if request.client else None
     await service.restore_user(admin_user, user_id, status_in.reason, client_ip)
     return {"success": True, "message": f"User '{user_id}' has been restored successfully."}
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=AdminUserDetail,
+    summary="Admin User Management: Update User Profile & Role",
+)
+async def admin_update_user(
+    user_id: uuid.UUID,
+    update_in: AdminUserUpdateRequest,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> AdminUserDetail:
+    client_ip = request.client.host if request.client else None
+    return await service.update_user_profile(user_id, update_in, admin_user, client_ip)
+
+
+@router.post(
+    "/users/{user_id}/email",
+    response_model=AdminUserDetail,
+    summary="Admin User Management: Update Registered User Email",
+)
+async def admin_update_user_email(
+    user_id: uuid.UUID,
+    email_in: AdminUserEmailChangeRequest,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin"])),
+    service: AdminService = Depends(get_admin_service),
+) -> AdminUserDetail:
+    client_ip = request.client.host if request.client else None
+    return await service.update_user_email(user_id, email_in, admin_user, client_ip)
+
+
+@router.delete(
+    "/users/{user_id}",
+    summary="Admin User Management: Safely Delete User Account",
+)
+async def admin_delete_user(
+    user_id: uuid.UUID,
+    request: Request,
+    reason: Optional[str] = Query(None, description="Reason for deletion"),
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin"])),
+    service: AdminService = Depends(get_admin_service),
+) -> Dict[str, Any]:
+    client_ip = request.client.host if request.client else None
+    delete_in = AdminUserDeleteRequest(reason=reason)
+    return await service.delete_user_account(user_id, delete_in, admin_user, client_ip)
 
 
 # -----------------------------------------------------------------------------
@@ -417,3 +483,255 @@ async def admin_change_password(
     client_ip = request.client.host if request.client else None
     await service.change_admin_password(admin_user, change_in, client_ip)
     return {"message": "Administrator password has been successfully updated with Argon2id."}
+
+
+# -----------------------------------------------------------------------------
+# 10. Contributors Management
+# -----------------------------------------------------------------------------
+@router.get(
+    "/contributors",
+    response_model=List[ContributorItem],
+    summary="Admin: List Project Contributors",
+)
+async def admin_get_contributors(
+    include_inactive: bool = Query(True, description="Whether to include inactive contributors"),
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> List[ContributorItem]:
+    return await service.get_contributors(include_inactive=include_inactive)
+
+
+@router.get(
+    "/contributors/{contributor_id}",
+    response_model=ContributorItem,
+    summary="Admin: Get Contributor Details",
+)
+async def admin_get_contributor(
+    contributor_id: str,
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> ContributorItem:
+    return await service.get_contributor(contributor_id)
+
+
+@router.post(
+    "/contributors",
+    response_model=ContributorItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Admin: Create New Contributor",
+)
+async def admin_create_contributor(
+    data: ContributorCreate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> ContributorItem:
+    client_ip = request.client.host if request.client else None
+    return await service.create_contributor(data, admin_user, client_ip)
+
+
+@router.put(
+    "/contributors/{contributor_id}",
+    response_model=ContributorItem,
+    summary="Admin: Update Contributor Record",
+)
+async def admin_update_contributor(
+    contributor_id: str,
+    data: ContributorUpdate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> ContributorItem:
+    client_ip = request.client.host if request.client else None
+    return await service.update_contributor(contributor_id, data, admin_user, client_ip)
+
+
+@router.delete(
+    "/contributors/{contributor_id}",
+    summary="Admin: Delete Contributor",
+)
+async def admin_delete_contributor(
+    contributor_id: str,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin"])),
+    service: AdminService = Depends(get_admin_service),
+) -> Dict[str, Any]:
+    client_ip = request.client.host if request.client else None
+    return await service.delete_contributor(contributor_id, admin_user, client_ip)
+
+
+@router.post(
+    "/contributors/reorder",
+    summary="Admin: Reorder Project Contributors",
+)
+async def admin_reorder_contributors(
+    items: List[ContributorReorderItem],
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> Dict[str, Any]:
+    client_ip = request.client.host if request.client else None
+    return await service.reorder_contributors(items, admin_user, client_ip)
+
+
+@router.get(
+    "/contributors-page-config",
+    response_model=ContributorsPageConfig,
+    summary="Admin: Get Contributors Page Configuration",
+)
+async def admin_get_contributors_page_config(
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> ContributorsPageConfig:
+    return await service.get_contributors_page_config()
+
+
+@router.put(
+    "/contributors-page-config",
+    response_model=ContributorsPageConfig,
+    summary="Admin: Update Contributors Page Configuration",
+)
+async def admin_update_contributors_page_config(
+    data: ContributorsPageConfigUpdate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> ContributorsPageConfig:
+    client_ip = request.client.host if request.client else None
+    return await service.update_contributors_page_config(data, admin_user, client_ip)
+
+
+# -----------------------------------------------------------------------------
+# 11. Website Pages (CMS) Management
+# -----------------------------------------------------------------------------
+@router.get(
+    "/pages",
+    response_model=List[WebsitePageItem],
+    summary="Admin: List Dynamic CMS Pages",
+)
+async def admin_get_pages(
+    include_unpublished: bool = Query(True, description="Whether to include unpublished pages"),
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> List[WebsitePageItem]:
+    return await service.get_pages(include_unpublished=include_unpublished)
+
+
+@router.get(
+    "/pages/{page_id}",
+    response_model=WebsitePageItem,
+    summary="Admin: Get Dynamic Page Details",
+)
+async def admin_get_page(
+    page_id: str,
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> WebsitePageItem:
+    return await service.get_page_by_id(page_id)
+
+
+@router.post(
+    "/pages",
+    response_model=WebsitePageItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Admin: Create New CMS Page",
+)
+async def admin_create_page(
+    data: WebsitePageCreate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> WebsitePageItem:
+    client_ip = request.client.host if request.client else None
+    return await service.create_page(data, admin_user, client_ip)
+
+
+@router.put(
+    "/pages/{page_id}",
+    response_model=WebsitePageItem,
+    summary="Admin: Update CMS Page",
+)
+async def admin_update_page(
+    page_id: str,
+    data: WebsitePageUpdate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin", "content_manager"])),
+    service: AdminService = Depends(get_admin_service),
+) -> WebsitePageItem:
+    client_ip = request.client.host if request.client else None
+    return await service.update_page(page_id, data, admin_user, client_ip)
+
+
+@router.delete(
+    "/pages/{page_id}",
+    summary="Admin: Delete CMS Page",
+)
+async def admin_delete_page(
+    page_id: str,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin"])),
+    service: AdminService = Depends(get_admin_service),
+) -> Dict[str, Any]:
+    client_ip = request.client.host if request.client else None
+    return await service.delete_page(page_id, admin_user, client_ip)
+
+
+# -----------------------------------------------------------------------------
+# 12. Scans Management
+# -----------------------------------------------------------------------------
+@router.get(
+    "/scans",
+    response_model=PaginatedAdminScans,
+    summary="Admin: List Scans Across Platform",
+)
+async def admin_get_scans(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None, description="Search by URL or domain"),
+    classification: Optional[str] = Query(None, description="Filter: SAFE, SUSPICIOUS, MALICIOUS"),
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> PaginatedAdminScans:
+    return await service.get_scans_list(page, page_size, search, classification)
+
+
+@router.get(
+    "/scans/{scan_id}",
+    summary="Admin: Get Detailed Scan Telemetry",
+)
+async def admin_get_scan_detail(
+    scan_id: str,
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> Dict[str, Any]:
+    return await service.get_scan_detail(scan_id)
+
+
+# -----------------------------------------------------------------------------
+# 13. System Settings Configuration
+# -----------------------------------------------------------------------------
+@router.get(
+    "/settings/general",
+    response_model=SystemSettingsConfig,
+    summary="Admin: Get Global System Settings & Branding",
+)
+async def admin_get_system_settings(
+    admin_user: AdminUserProfile = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+) -> SystemSettingsConfig:
+    return await service.get_system_settings()
+
+
+@router.put(
+    "/settings/general",
+    response_model=SystemSettingsConfig,
+    summary="Admin: Update Global System Settings & Branding",
+)
+async def admin_update_system_settings(
+    data: SystemSettingsUpdate,
+    request: Request,
+    admin_user: AdminUserProfile = Depends(require_admin_role(["super_admin", "admin"])),
+    service: AdminService = Depends(get_admin_service),
+) -> SystemSettingsConfig:
+    client_ip = request.client.host if request.client else None
+    return await service.update_system_settings(data, admin_user, client_ip)

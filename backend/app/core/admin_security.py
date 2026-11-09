@@ -280,3 +280,18 @@ async def get_current_admin(
     
     return admin
 
+
+def require_admin_role(allowed_roles: list[str]):
+    """
+    Factory dependency for RBAC. Ensures current admin user has one of the allowed roles.
+    `super_admin` always has full authority across all endpoints.
+    """
+    async def _role_checker(admin: AdminUserProfile = Depends(get_current_admin)) -> AdminUserProfile:
+        if admin.role != "super_admin" and admin.role not in allowed_roles:
+            raise ForbiddenError(
+                f"Action requires one of the following roles: {', '.join(allowed_roles)}. Current role: {admin.role}"
+            )
+        return admin
+    return _role_checker
+
+

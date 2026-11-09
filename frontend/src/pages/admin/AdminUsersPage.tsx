@@ -3,9 +3,12 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Edit3,
   Eye,
+  Mail,
   RefreshCw,
   Search,
+  Trash2,
   UserCheck,
   UserX,
   Users,
@@ -38,6 +41,26 @@ export const AdminUsersPage: React.FC = () => {
   const [actionReason, setActionReason] = useState('');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Edit Profile / Role Modal State
+  const [editProfileTarget, setEditProfileTarget] = useState<{
+    user: AdminUserListItem;
+    fullName: string;
+    role: string;
+  } | null>(null);
+
+  // Edit Email Modal State
+  const [emailChangeTarget, setEmailChangeTarget] = useState<{
+    user: AdminUserListItem;
+    newEmail: string;
+    reason: string;
+  } | null>(null);
+
+  // Delete User Modal State
+  const [deleteTarget, setDeleteTarget] = useState<{
+    user: AdminUserListItem;
+    reason: string;
+  } | null>(null);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -99,6 +122,65 @@ export const AdminUsersPage: React.FC = () => {
       }
     } catch (err: any) {
       setActionError(err.response?.data?.message || 'Action failed.');
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editProfileTarget) return;
+    setIsSubmittingAction(true);
+    setActionError(null);
+    try {
+      await adminService.updateUser(editProfileTarget.user.id, {
+        full_name: editProfileTarget.fullName.trim(),
+        role: editProfileTarget.role,
+      });
+      setEditProfileTarget(null);
+      loadUsers();
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.response?.data?.message || 'Failed updating user.');
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!emailChangeTarget) return;
+    if (!emailChangeTarget.newEmail.includes('@')) {
+      setActionError('Valid email address required.');
+      return;
+    }
+    setIsSubmittingAction(true);
+    setActionError(null);
+    try {
+      await adminService.updateUserEmail(
+        emailChangeTarget.user.id,
+        emailChangeTarget.newEmail.trim(),
+        emailChangeTarget.reason.trim() || undefined
+      );
+      setEmailChangeTarget(null);
+      loadUsers();
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.response?.data?.message || 'Failed changing email.');
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setIsSubmittingAction(true);
+    setActionError(null);
+    try {
+      await adminService.deleteUser(deleteTarget.user.id, deleteTarget.reason.trim() || undefined);
+      setDeleteTarget(null);
+      loadUsers();
+      if (selectedUser?.id === deleteTarget.user.id) {
+        setSelectedUser(null);
+      }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.response?.data?.message || 'Failed deleting user.');
     } finally {
       setIsSubmittingAction(false);
     }
@@ -227,22 +309,55 @@ export const AdminUsersPage: React.FC = () => {
                         day: 'numeric',
                       })}
                     </td>
-                    <td className="py-3 px-4 text-right space-x-1.5">
+                    <td className="py-3 px-4 text-right space-x-1">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => openUserDetail(u.id)}
-                        className="text-[11px] font-mono py-1 px-2"
+                        className="text-[11px] font-mono py-1 px-1.5"
                         title="View Full Profile & History"
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setEditProfileTarget({
+                            user: u,
+                            fullName: u.full_name || '',
+                            role: u.role || 'user',
+                          })
+                        }
+                        className="text-[11px] font-mono py-1 px-1.5 text-blue-400 hover:text-blue-300"
+                        title="Edit Name & Role"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setEmailChangeTarget({
+                            user: u,
+                            newEmail: u.email,
+                            reason: '',
+                          })
+                        }
+                        className="text-[11px] font-mono py-1 px-1.5 text-amber-400 hover:text-amber-300"
+                        title="Change Registered Email"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                      </Button>
+
                       {u.is_active ? (
                         <Button
                           variant="danger"
                           size="sm"
                           onClick={() => setActionTarget({ user: u, type: 'suspend' })}
-                          className="text-[11px] font-mono py-1 px-2"
+                          className="text-[11px] font-mono py-1 px-1.5"
                           title="Suspend User Access"
                         >
                           <UserX className="w-3.5 h-3.5" />
@@ -252,12 +367,27 @@ export const AdminUsersPage: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => setActionTarget({ user: u, type: 'restore' })}
-                          className="text-[11px] font-mono py-1 px-2 text-emerald-400 hover:text-emerald-300"
+                          className="text-[11px] font-mono py-1 px-1.5 text-emerald-400 hover:text-emerald-300"
                           title="Restore User Access"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
                         </Button>
                       )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setDeleteTarget({
+                            user: u,
+                            reason: '',
+                          })
+                        }
+                        className="text-[11px] font-mono py-1 px-1.5 text-rose-500 hover:text-rose-400 hover:bg-rose-950/20"
+                        title="Delete User Account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -440,6 +570,240 @@ export const AdminUsersPage: React.FC = () => {
                 className="font-mono text-xs uppercase"
               >
                 CONFIRM {actionTarget.type}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* Edit Profile & Role Modal                                     */}
+      {/* ------------------------------------------------------------- */}
+      {editProfileTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <Card pixelFrame className="max-w-md w-full p-6 bg-[#0E0E0E] border-[#2A2A2A] space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-mono font-semibold uppercase text-white">
+                  Edit User Profile & Role
+                </h3>
+                <p className="text-xs font-mono text-[#888888] mt-1">
+                  Target: <span className="text-white">{editProfileTarget.user.email}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditProfileTarget(null);
+                  setActionError(null);
+                }}
+                className="text-[#666666] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {actionError && (
+              <p className="text-xs font-mono text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-900/50">
+                {actionError}
+              </p>
+            )}
+
+            <div className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="block text-[#A1A1A1] uppercase tracking-wider mb-1">Display Name</label>
+                <input
+                  type="text"
+                  value={editProfileTarget.fullName}
+                  onChange={(e) =>
+                    setEditProfileTarget({ ...editProfileTarget, fullName: e.target.value })
+                  }
+                  className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded p-2 text-white"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#A1A1A1] uppercase tracking-wider mb-1">Account Role</label>
+                <select
+                  value={editProfileTarget.role}
+                  onChange={(e) =>
+                    setEditProfileTarget({ ...editProfileTarget, role: e.target.value })
+                  }
+                  className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded p-2 text-white"
+                >
+                  <option value="user">Standard User (user)</option>
+                  <option value="security_analyst">Security Analyst (security_analyst)</option>
+                  <option value="moderator">Community Moderator (moderator)</option>
+                  <option value="admin">Administrator (admin)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditProfileTarget(null);
+                  setActionError(null);
+                }}
+              >
+                CANCEL
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveProfile}
+                isLoading={isSubmittingAction}
+              >
+                SAVE CHANGES
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* Change Registered Email Modal                                 */}
+      {/* ------------------------------------------------------------- */}
+      {emailChangeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <Card pixelFrame className="max-w-md w-full p-6 bg-[#0E0E0E] border-[#2A2A2A] space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-mono font-semibold uppercase text-white">
+                  Update Account Email
+                </h3>
+                <p className="text-xs font-mono text-[#888888] mt-1">
+                  Updates Supabase Auth identity and public profile.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setEmailChangeTarget(null);
+                  setActionError(null);
+                }}
+                className="text-[#666666] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {actionError && (
+              <p className="text-xs font-mono text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-900/50">
+                {actionError}
+              </p>
+            )}
+
+            <div className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="block text-[#A1A1A1] uppercase tracking-wider mb-1">New Email Address</label>
+                <input
+                  type="email"
+                  value={emailChangeTarget.newEmail}
+                  onChange={(e) =>
+                    setEmailChangeTarget({ ...emailChangeTarget, newEmail: e.target.value })
+                  }
+                  className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded p-2 text-white"
+                  placeholder="new-address@trustguard.ai"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#A1A1A1] uppercase tracking-wider mb-1">Reason for Change</label>
+                <input
+                  type="text"
+                  value={emailChangeTarget.reason}
+                  onChange={(e) =>
+                    setEmailChangeTarget({ ...emailChangeTarget, reason: e.target.value })
+                  }
+                  className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded p-2 text-white"
+                  placeholder="User ticket request or typo correction"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEmailChangeTarget(null);
+                  setActionError(null);
+                }}
+              >
+                CANCEL
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveEmail}
+                isLoading={isSubmittingAction}
+              >
+                UPDATE EMAIL
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* Delete User Account Modal                                     */}
+      {/* ------------------------------------------------------------- */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <Card pixelFrame className="max-w-md w-full p-6 bg-[#0E0E0E] border-[#2A2A2A] space-y-4">
+            <div className="flex items-start space-x-3 text-rose-500">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-mono font-semibold uppercase text-white">
+                  Permanently Delete User Account
+                </h3>
+                <p className="text-xs font-mono text-[#888888] mt-1">
+                  Target: <span className="text-white font-bold">{deleteTarget.user.email}</span>
+                </p>
+                <p className="text-[11px] font-mono text-rose-400 mt-1">
+                  Warning: This action will permanently remove authentication records and profile data.
+                </p>
+              </div>
+            </div>
+
+            {actionError && (
+              <p className="text-xs font-mono text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-900/50">
+                {actionError}
+              </p>
+            )}
+
+            <div className="space-y-1.5 font-mono text-xs">
+              <label className="block text-[#A1A1A1] uppercase tracking-wider">Reason for Deletion</label>
+              <input
+                type="text"
+                value={deleteTarget.reason}
+                onChange={(e) => setDeleteTarget({ ...deleteTarget, reason: e.target.value })}
+                className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded p-2 text-white"
+                placeholder="GDPR erasure request, compliance, or fraud removal"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setActionError(null);
+                }}
+              >
+                CANCEL
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleDeleteUser}
+                isLoading={isSubmittingAction}
+              >
+                CONFIRM DELETION
               </Button>
             </div>
           </Card>

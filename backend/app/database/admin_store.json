@@ -1,0 +1,139 @@
+{
+  "admin_users": {
+    "a2107163-49cd-4486-b982-edef1b495a58": {
+      "id": "a2107163-49cd-4486-b982-edef1b495a58",
+      "username": "admin",
+      "password_hash": "scrypt$16384$8$1$f79f60ae1601facf6f7be1d48a90bcde$b3d6bc81b3b08156784f3778e0f48572fd871b07a17ebb993fb1af6b39d6ab2968c1c0ff2f135df56596872951bdaaa24f482b013a51a4f95024acc73cf5bf17",
+      "email": "admin@trustguard.ai",
+      "full_name": "Security Administrator",
+      "role": "super_admin",
+      "is_active": true,
+      "last_login_at": null,
+      "last_login_ip": null,
+      "failed_login_attempts": 0,
+      "locked_until": null,
+      "created_at": "2026-11-08T14:43:22.659592+00:00",
+      "updated_at": "2026-11-09T15:10:07.496168+00:00"
+    }
+  },
+  "audit_logs": [],
+  "system_settings": {
+    "maintenance_config": {
+      "maintenance_enabled": false,
+      "maintenance_message": "TrustGuard AI is temporarily undergoing scheduled maintenance. We are optimizing our threat detection engines and will be back shortly.",
+      "estimated_restore_time": null,
+      "internal_reason": "System operating normally.",
+      "updated_by": "system",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "contributors_page_config": {
+      "title": "Project Contributors",
+      "subtitle": "The core developers, security researchers, and contributors powering TrustGuard AI.",
+      "header_banner_url": null,
+      "is_published": true,
+      "show_in_navigation": true,
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "general_settings": {
+      "site_name": "TrustGuard AI",
+      "site_tagline": "AI-Powered Phishing & Scam URL Detection",
+      "site_description": "Next-generation URL threat intelligence and automated cyber fraud protection.",
+      "logo_url": null,
+      "favicon_url": null,
+      "announcement_enabled": false,
+      "announcement_message": "TrustGuard AI 2.0 Released: Real-time ML inspection and community threat feed is live.",
+      "announcement_type": "info",
+      "announcement_link": null,
+      "allow_registration": true,
+      "allow_guest_scans": true,
+      "allow_community_reports": true,
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    }
+  },
+  "contributors": {
+    "contributor-1": {
+      "id": "contributor-1",
+      "name": "Ratul Saha",
+      "role": "Lead Architect & Security Researcher",
+      "bio": "Cybersecurity specialist focused on adversarial AI models, heuristic phishing analysis, and real-time defense architectures.",
+      "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      "social_links": {
+        "github": "https://github.com",
+        "linkedin": "https://linkedin.com",
+        "website": "https://trustguard-ai-xi.vercel.app"
+      },
+      "display_order": 1,
+      "is_active": true,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "contributor-2": {
+      "id": "contributor-2",
+      "name": "TrustGuard Core Research Team",
+      "role": "Threat Intelligence & Detection Engineering",
+      "bio": "Specialized group engineering the TrustGuard ML classifier, entropy calculators, and continuous SSL validation pipeline.",
+      "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+      "social_links": {
+        "github": "https://github.com",
+        "twitter": "https://twitter.com"
+      },
+      "display_order": 2,
+      "is_active": true,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "contributor-3": {
+      "id": "contributor-3",
+      "name": "Alex Rivera",
+      "role": "Full-Stack Security Engineer",
+      "bio": "Front-end and API architect leading the pixel-frame design system and high-throughput dashboard telemetry.",
+      "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+      "social_links": {
+        "github": "https://github.com",
+        "linkedin": "https://linkedin.com"
+      },
+      "display_order": 3,
+      "is_active": true,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    }
+  },
+  "website_pages": {
+    "page-about": {
+      "id": "page-about",
+      "title": "About TrustGuard AI",
+      "slug": "about",
+      "meta_description": "Discover how TrustGuard AI defends users and enterprises against online fraud, phishing, and scam domains.",
+      "content": "# About TrustGuard AI\n\nTrustGuard AI is an advanced, multi-layered threat detection platform engineered to protect individuals and organizations from cyber fraud, phishing campaigns, deceptive redirects, and malicious web resources.\n\n## Multi-Layer Detection Architecture\n1. **Static Heuristic Engine**: Scans for homograph attacks, typosquatting, suspicious top-level domains, excessive entropy, and obscured redirects.\n2. **AI & Machine Learning Inference**: Real-time classification utilizing lightweight threat intelligence classifiers trained on millions of legitimate and malicious URLs.\n3. **SSL/TLS & Domain Trust Verification**: Deep inspection of certificate authorities, validity lifespans, issuer trust, and domain age.\n4. **Decentralized Community Intelligence**: Real-time threat reports reviewed and confirmed by security analysts worldwide.\n\n## Our Mission\nWe believe the modern web should be verifiable and secure for everyone. TrustGuard AI empowers users with instant, transparent trust ratings before they ever click or submit sensitive information.",
+      "is_published": true,
+      "show_in_navigation": true,
+      "nav_order": 1,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "page-privacy": {
+      "id": "page-privacy",
+      "title": "Privacy Policy",
+      "slug": "privacy",
+      "meta_description": "TrustGuard AI Privacy Policy and data handling disclosures.",
+      "content": "# Privacy Policy\n\n**Effective Date:** November 2026\n\nAt TrustGuard AI, we prioritize user anonymity and privacy. This Privacy Policy details what information we process and how we protect your rights.\n\n## 1. URL Submissions\n- When you submit a URL for analysis, the URL is processed by our automated heuristic and machine learning pipeline.\n- Users may choose to scan anonymously in Guest Mode without logging in.\n- URLs identified as malicious may be aggregated anonymously into our threat intelligence database to protect other users.\n\n## 2. User Accounts\n- If you create an account, we store your email and authentication credentials securely via Supabase Auth with industry-standard bcrypt/Argon2id encryption.\n- We will never sell, lease, or monetize your personal information or browsing history.\n\n## 3. Data Retention\n- Authenticated scan history is accessible only by the account owner protected by Row-Level Security (RLS).\n- You can request complete deletion of your account and associated scan history at any time through our settings.",
+      "is_published": true,
+      "show_in_navigation": true,
+      "nav_order": 2,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    },
+    "page-terms": {
+      "id": "page-terms",
+      "title": "Terms of Service",
+      "slug": "terms",
+      "meta_description": "Terms of service and acceptable use guidelines for TrustGuard AI.",
+      "content": "# Terms of Service\n\n**Effective Date:** November 2026\n\nBy accessing or using TrustGuard AI, you agree to comply with and be bound by these Terms of Service.\n\n## 1. Permitted Use\n- TrustGuard AI is designed for cyber defense, security research, and personal browsing safety.\n- You may not use TrustGuard AI to conduct automated denial-of-service attacks, reverse-engineer proprietary detection algorithms, or probe targets without authorization.\n\n## 2. Disclaimer of Warranties\n- While TrustGuard AI utilizes cutting-edge heuristics, machine learning, and threat intelligence feeds, no security scanner can guarantee 100% accuracy.\n- We provide our analysis as an informational aid and accept no liability for damages resulting from user actions taken based on scan ratings.\n\n## 3. Community Conduct\n- Threat reports submitted by community members must be accurate and submitted in good faith. False reporting or malicious reputation manipulation is grounds for immediate account termination.",
+      "is_published": true,
+      "show_in_navigation": true,
+      "nav_order": 3,
+      "created_at": "2026-11-09T14:00:00.000000+00:00",
+      "updated_at": "2026-11-09T14:00:00.000000+00:00"
+    }
+  }
+}

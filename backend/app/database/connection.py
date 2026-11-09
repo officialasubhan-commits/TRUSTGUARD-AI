@@ -76,7 +76,7 @@ def get_available_tables(force_refresh: bool = False) -> set[str]:
             "apikey": key,
             "Authorization": f"Bearer {key}",
         }
-        with httpx.Client(timeout=3.0) as client:
+        with httpx.Client(timeout=httpx.Timeout(1.5, connect=0.8)) as client:
             resp = client.get(f"{url}/rest/v1/", headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
@@ -91,7 +91,7 @@ def get_available_tables(force_refresh: bool = False) -> set[str]:
 
     if _available_tables_cache is None:
         _available_tables_cache = _CORE_TABLES.copy()
-    _cache_timestamp = now
+    _cache_timestamp = now + 60.0
     return _available_tables_cache
 
 

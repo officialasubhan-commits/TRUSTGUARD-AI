@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  Award,
   ClipboardList,
   ExternalLink,
+  FileText,
   Flame,
+  Globe,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -30,8 +33,11 @@ export const AdminLayout: React.FC = () => {
   const navItems = [
     { name: 'Overview', to: '/admin', icon: LayoutDashboard, exact: true },
     { name: 'Users', to: '/admin/users', icon: Users },
+    { name: 'Website Scans', to: '/admin/scans', icon: Globe },
     { name: 'Community Reports', to: '/admin/reports', icon: ClipboardList },
     { name: 'Threat Intelligence', to: '/admin/threat-intelligence', icon: Flame },
+    { name: 'Contributors', to: '/admin/contributors', icon: Award },
+    { name: 'CMS Pages', to: '/admin/pages', icon: FileText },
     { name: 'System Monitoring', to: '/admin/system', icon: Server },
     { name: 'Maintenance Mode', to: '/admin/maintenance', icon: Wrench },
     { name: 'Audit Logs', to: '/admin/audit-logs', icon: Activity },

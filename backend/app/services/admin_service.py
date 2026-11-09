@@ -42,23 +42,39 @@ from app.schemas.admin import (
     AdminReportDetail,
     AdminReportListItem,
     AdminReportModerationAction,
+    AdminScanItem,
     AdminThreatIntelSummary,
     AdminTokenResponse,
+    AdminUserDeleteRequest,
     AdminUserDetail,
+    AdminUserEmailChangeRequest,
     AdminUserListItem,
     AdminUserProfile,
+    AdminUserUpdateRequest,
     BulkModerationDetail,
+    ContributorCreate,
+    ContributorItem,
+    ContributorReorderItem,
+    ContributorsPageConfig,
+    ContributorsPageConfigUpdate,
+    ContributorUpdate,
     DailyActivityPoint,
     MaintenanceConfig,
     MaintenanceUpdateRequest,
     ModerationActivityPoint,
     PaginatedAdminAuditLogs,
     PaginatedAdminReports,
+    PaginatedAdminScans,
     PaginatedAdminUsers,
     ServiceHealthItem,
     SystemHealthResponse,
+    SystemSettingsConfig,
+    SystemSettingsUpdate,
     ThreatCategoryPoint,
     ThreatIntelItem,
+    WebsitePageCreate,
+    WebsitePageItem,
+    WebsitePageUpdate,
 )
 
 logger = logging.getLogger("trustguard.service.admin")
@@ -774,6 +790,349 @@ class AdminService:
         search: Optional[str] = None,
     ) -> PaginatedAdminAuditLogs:
         return await self._repo.get_audit_logs(page, page_size, action, admin_username, search)
+
+    # -------------------------------------------------------------------------
+    # 9. Enhanced User Management
+    # -------------------------------------------------------------------------
+    async def update_user_profile(
+        self,
+        user_id: uuid.UUID,
+        update_in: AdminUserUpdateRequest,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> AdminUserDetail:
+        """Updates user profile attributes with audit logging."""
+        user = await self._repo.get_user_detail(user_id)
+        if not user:
+            raise NotFoundError("User not found.")
+
+        ok = await self._repo.update_user_profile(
+            user_id=user_id,
+            full_name=update_in.full_name,
+            role=update_in.role,
+            is_active=update_in.is_active,
+        )
+        if not ok:
+            raise BadRequestError("Failed to update user profile.")
+
+        await self._repo.log_audit_event(
+            action="USER_PROFILE_UPDATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"user:{user_id}",
+            outcome="SUCCESS",
+            details={
+                "updates": update_in.model_dump(exclude_unset=True),
+                "previous_email": user.email,
+            },
+            ip_address=client_ip,
+        )
+        updated = await self._repo.get_user_detail(user_id)
+        return updated or user
+
+    async def update_user_email(
+        self,
+        user_id: uuid.UUID,
+        email_in: AdminUserEmailChangeRequest,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> AdminUserDetail:
+        """Securely changes user email in Supabase Auth & public.users with audit logging."""
+        user = await self._repo.get_user_detail(user_id)
+        if not user:
+            raise NotFoundError("User not found.")
+
+        old_email = user.email
+        new_email = str(email_in.new_email).lower()
+
+        ok = await self._repo.update_user_email(user_id, new_email)
+        if not ok:
+            raise BadRequestError("Failed to update user email.")
+
+        await self._repo.log_audit_event(
+            action="USER_EMAIL_CHANGE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"user:{user_id}",
+            outcome="SUCCESS",
+            details={
+                "old_email": old_email,
+                "new_email": new_email,
+                "reason": email_in.reason,
+            },
+            ip_address=client_ip,
+        )
+        updated = await self._repo.get_user_detail(user_id)
+        return updated or user
+
+    async def delete_user_account(
+        self,
+        user_id: uuid.UUID,
+        delete_in: AdminUserDeleteRequest,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Safely and permanently deletes user account across Supabase Auth and database."""
+        user = await self._repo.get_user_detail(user_id)
+        if not user:
+            raise NotFoundError("User not found.")
+
+        ok = await self._repo.delete_user_account(user_id)
+        if not ok:
+            raise BadRequestError("Failed to delete user account.")
+
+        await self._repo.log_audit_event(
+            action="USER_DELETE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"user:{user_id}",
+            outcome="SUCCESS",
+            details={
+                "deleted_email": user.email,
+                "deleted_name": user.full_name,
+                "reason": delete_in.reason,
+            },
+            ip_address=client_ip,
+        )
+        return {"status": "success", "message": f"User {user.email} was successfully deleted."}
+
+    # -------------------------------------------------------------------------
+    # 10. Contributors Operations
+    # -------------------------------------------------------------------------
+    async def get_contributors(self, include_inactive: bool = False) -> List[ContributorItem]:
+        return await self._repo.get_contributors(include_inactive)
+
+    async def get_contributor(self, contributor_id: str) -> ContributorItem:
+        c = await self._repo.get_contributor(contributor_id)
+        if not c:
+            raise NotFoundError("Contributor not found.")
+        return c
+
+    async def create_contributor(
+        self,
+        data: ContributorCreate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> ContributorItem:
+        c = await self._repo.create_contributor(data)
+        await self._repo.log_audit_event(
+            action="CONTRIBUTOR_CREATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"contributor:{c.id}",
+            outcome="SUCCESS",
+            details={"name": c.name, "role": c.role},
+            ip_address=client_ip,
+        )
+        return c
+
+    async def update_contributor(
+        self,
+        contributor_id: str,
+        data: ContributorUpdate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> ContributorItem:
+        c = await self._repo.update_contributor(contributor_id, data)
+        if not c:
+            raise NotFoundError("Contributor not found.")
+        await self._repo.log_audit_event(
+            action="CONTRIBUTOR_UPDATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"contributor:{contributor_id}",
+            outcome="SUCCESS",
+            details={"name": c.name, "updates": data.model_dump(exclude_unset=True)},
+            ip_address=client_ip,
+        )
+        return c
+
+    async def delete_contributor(
+        self,
+        contributor_id: str,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        c = await self._repo.get_contributor(contributor_id)
+        if not c:
+            raise NotFoundError("Contributor not found.")
+        ok = await self._repo.delete_contributor(contributor_id)
+        if not ok:
+            raise BadRequestError("Failed to delete contributor.")
+        await self._repo.log_audit_event(
+            action="CONTRIBUTOR_DELETE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"contributor:{contributor_id}",
+            outcome="SUCCESS",
+            details={"name": c.name},
+            ip_address=client_ip,
+        )
+        return {"status": "success", "message": f"Contributor {c.name} deleted."}
+
+    async def reorder_contributors(
+        self,
+        items: List[ContributorReorderItem],
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        await self._repo.reorder_contributors(items)
+        await self._repo.log_audit_event(
+            action="CONTRIBUTORS_REORDER",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource="contributors:order",
+            outcome="SUCCESS",
+            details={"count": len(items)},
+            ip_address=client_ip,
+        )
+        return {"status": "success", "message": "Contributors reordered successfully."}
+
+    async def get_contributors_page_config(self) -> ContributorsPageConfig:
+        return await self._repo.get_contributors_page_config()
+
+    async def update_contributors_page_config(
+        self,
+        data: ContributorsPageConfigUpdate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> ContributorsPageConfig:
+        cfg = await self._repo.update_contributors_page_config(data)
+        await self._repo.log_audit_event(
+            action="CONTRIBUTORS_CONFIG_UPDATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource="contributors:page_config",
+            outcome="SUCCESS",
+            details=data.model_dump(exclude_unset=True),
+            ip_address=client_ip,
+        )
+        return cfg
+
+    # -------------------------------------------------------------------------
+    # 11. Dynamic CMS Pages Operations
+    # -------------------------------------------------------------------------
+    async def get_pages(self, include_unpublished: bool = False) -> List[WebsitePageItem]:
+        return await self._repo.get_pages(include_unpublished)
+
+    async def get_page_by_id(self, page_id: str) -> WebsitePageItem:
+        p = await self._repo.get_page_by_id(page_id)
+        if not p:
+            raise NotFoundError("Page not found.")
+        return p
+
+    async def get_page_by_slug(self, slug: str) -> WebsitePageItem:
+        p = await self._repo.get_page_by_slug(slug)
+        if not p or not p.is_published:
+            raise NotFoundError(f"Page '{slug}' not found or is unpublished.")
+        return p
+
+    async def create_page(
+        self,
+        data: WebsitePageCreate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> WebsitePageItem:
+        existing = await self._repo.get_page_by_slug(data.slug)
+        if existing:
+            raise BadRequestError(f"A page with slug '{data.slug}' already exists.")
+        p = await self._repo.create_page(data)
+        await self._repo.log_audit_event(
+            action="PAGE_CREATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"page:{p.id}",
+            outcome="SUCCESS",
+            details={"title": p.title, "slug": p.slug},
+            ip_address=client_ip,
+        )
+        return p
+
+    async def update_page(
+        self,
+        page_id: str,
+        data: WebsitePageUpdate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> WebsitePageItem:
+        p = await self._repo.update_page(page_id, data)
+        if not p:
+            raise NotFoundError("Page not found.")
+        await self._repo.log_audit_event(
+            action="PAGE_UPDATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"page:{page_id}",
+            outcome="SUCCESS",
+            details={"title": p.title, "slug": p.slug, "updates": data.model_dump(exclude_unset=True)},
+            ip_address=client_ip,
+        )
+        return p
+
+    async def delete_page(
+        self,
+        page_id: str,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        p = await self._repo.get_page_by_id(page_id)
+        if not p:
+            raise NotFoundError("Page not found.")
+        ok = await self._repo.delete_page(page_id)
+        if not ok:
+            raise BadRequestError("Failed to delete page.")
+        await self._repo.log_audit_event(
+            action="PAGE_DELETE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource=f"page:{page_id}",
+            outcome="SUCCESS",
+            details={"title": p.title, "slug": p.slug},
+            ip_address=client_ip,
+        )
+        return {"status": "success", "message": f"Page '{p.title}' was successfully deleted."}
+
+    # -------------------------------------------------------------------------
+    # 12. Scans Management
+    # -------------------------------------------------------------------------
+    async def get_scans_list(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search: Optional[str] = None,
+        classification: Optional[str] = None,
+    ) -> PaginatedAdminScans:
+        return await self._repo.get_scans_list(page, page_size, search, classification)
+
+    async def get_scan_detail(self, scan_id: str) -> Dict[str, Any]:
+        s = await self._repo.get_scan_detail(scan_id)
+        if not s:
+            raise NotFoundError("Scan not found.")
+        return s
+
+    # -------------------------------------------------------------------------
+    # 13. System Settings & Branding
+    # -------------------------------------------------------------------------
+    async def get_system_settings(self) -> SystemSettingsConfig:
+        return await self._repo.get_system_settings()
+
+    async def update_system_settings(
+        self,
+        data: SystemSettingsUpdate,
+        admin_user: AdminUserProfile,
+        client_ip: Optional[str] = None,
+    ) -> SystemSettingsConfig:
+        cfg = await self._repo.update_system_settings(data)
+        await self._repo.log_audit_event(
+            action="SYSTEM_SETTINGS_UPDATE",
+            admin_username=admin_user.username,
+            admin_id=admin_user.id,
+            target_resource="system:settings",
+            outcome="SUCCESS",
+            details=data.model_dump(exclude_unset=True),
+            ip_address=client_ip,
+        )
+        return cfg
 
 
 _admin_service_instance: Optional[AdminService] = None

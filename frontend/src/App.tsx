@@ -24,12 +24,17 @@ import { MyReportsPage } from './pages/MyReportsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DesignSystemShowcasePage } from './pages/DesignSystemShowcasePage';
 import { AnimationShowcasePage } from './pages/AnimationShowcasePage';
+import { ContributorsPage } from './pages/ContributorsPage';
+import { DynamicPage } from './pages/DynamicPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 // Admin Pages
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminContributorsPage } from './pages/admin/AdminContributorsPage';
+import { AdminPagesPage } from './pages/admin/AdminPagesPage';
+import { AdminScansPage } from './pages/admin/AdminScansPage';
 import { AdminReportsPage } from './pages/admin/AdminReportsPage';
 import { AdminReportDetailPage } from './pages/admin/AdminReportDetailPage';
 import { AdminThreatIntelPage } from './pages/admin/AdminThreatIntelPage';
@@ -58,6 +63,9 @@ export const App: React.FC = () => {
             >
               <Route index element={<AdminDashboardPage />} />
               <Route path="users" element={<AdminUsersPage />} />
+              <Route path="contributors" element={<AdminContributorsPage />} />
+              <Route path="pages" element={<AdminPagesPage />} />
+              <Route path="scans" element={<AdminScansPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="reports/:reportId" element={<AdminReportDetailPage />} />
               <Route path="threat-intelligence" element={<AdminThreatIntelPage />} />
@@ -72,6 +80,8 @@ export const App: React.FC = () => {
               <Route index element={<HomePage />} />
               <Route path="scan" element={<ScannerPage />} />
               <Route path="report/:scanId" element={<ReportPage />} />
+              <Route path="contributors" element={<ContributorsPage />} />
+              <Route path="p/:slug" element={<DynamicPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="forgot-password" element={<ForgotPasswordPage />} />

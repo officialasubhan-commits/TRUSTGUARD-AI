@@ -230,6 +230,47 @@ export const AdminDashboardPage: React.FC = () => {
       </div>
 
       {/* ----------------------------------------------------------- */}
+      {/* Platform Scan & Content Telemetry Breakdown                 */}
+      {/* ----------------------------------------------------------- */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-3 bg-[#0D0D0D] border border-[#222222] rounded flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-mono text-[#888888]">SAFE SCANS</p>
+            <p className="text-lg font-mono font-medium text-emerald-400 mt-0.5">{stats?.safe_scans || 0}</p>
+          </div>
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+        </div>
+
+        <div className="p-3 bg-[#0D0D0D] border border-[#222222] rounded flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-mono text-[#888888]">SUSPICIOUS SCANS</p>
+            <p className="text-lg font-mono font-medium text-amber-400 mt-0.5">{stats?.suspicious_scans || 0}</p>
+          </div>
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+        </div>
+
+        <div className="p-3 bg-[#0D0D0D] border border-[#222222] rounded flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-mono text-[#888888]">PROJECT CONTRIBUTORS</p>
+            <p className="text-lg font-mono font-medium text-white mt-0.5">{stats?.total_contributors || 0}</p>
+          </div>
+          <a href="/admin/contributors" className="text-[10px] font-mono text-[#888888] hover:text-white underline">
+            MANAGE
+          </a>
+        </div>
+
+        <div className="p-3 bg-[#0D0D0D] border border-[#222222] rounded flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-mono text-[#888888]">PUBLISHED CMS PAGES</p>
+            <p className="text-lg font-mono font-medium text-white mt-0.5">{stats?.published_pages || 0}</p>
+          </div>
+          <a href="/admin/pages" className="text-[10px] font-mono text-[#888888] hover:text-white underline">
+            MANAGE
+          </a>
+        </div>
+      </div>
+
+      {/* ----------------------------------------------------------- */}
       {/* Activity Charts Section                                     */}
       {/* ----------------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

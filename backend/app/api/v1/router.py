@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     history,
     maintenance,
     ml,
+    public_cms,
     reports,
     scanner,
     scans,
@@ -25,6 +26,7 @@ from app.api.v1.endpoints import (
 api_router = APIRouter()
 
 api_router.include_router(health.router, tags=["Health"])
+api_router.include_router(public_cms.router, tags=["Public CMS & Contributors"])
 api_router.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
 api_router.include_router(authentication.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])

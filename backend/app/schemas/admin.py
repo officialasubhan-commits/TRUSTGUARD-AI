@@ -58,6 +58,12 @@ class AdminDashboardStats(BaseModel):
     rejected_reports: int = 0
     resolved_reports: int = 0
     high_risk_urls: int = 0
+    safe_scans: int = 0
+    suspicious_scans: int = 0
+    malicious_scans: int = 0
+    total_contributors: int = 0
+    published_pages: int = 0
+    system_status: str = "healthy"
     maintenance_enabled: bool = False
     maintenance_message: Optional[str] = None
 
@@ -143,6 +149,21 @@ class AdminUserStatusUpdate(BaseModel):
 class AdminUserRoleUpdate(BaseModel):
     role: str = Field(..., pattern="^(user|security_analyst|moderator|admin)$")
     reason: str = Field(..., min_length=4, max_length=500, description="Mandatory reason for role change")
+
+
+class AdminUserUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class AdminUserEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    reason: Optional[str] = None
+
+
+class AdminUserDeleteRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 # -----------------------------------------------------------------------------
@@ -339,4 +360,171 @@ class PaginatedAdminAuditLogs(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+# -----------------------------------------------------------------------------
+# 10. Contributors Management
+# -----------------------------------------------------------------------------
+class ContributorSocialLinks(BaseModel):
+    github: Optional[str] = None
+    linkedin: Optional[str] = None
+    twitter: Optional[str] = None
+    website: Optional[str] = None
+
+
+class ContributorItem(BaseModel):
+    id: str
+    name: str
+    role: str
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    social_links: ContributorSocialLinks = ContributorSocialLinks()
+    display_order: int = 0
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContributorCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    role: str = Field(..., min_length=2, max_length=120)
+    bio: Optional[str] = Field(None, max_length=500)
+    avatar_url: Optional[str] = None
+    social_links: ContributorSocialLinks = ContributorSocialLinks()
+    display_order: int = 0
+    is_active: bool = True
+
+
+class ContributorUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    social_links: Optional[ContributorSocialLinks] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class ContributorReorderItem(BaseModel):
+    id: str
+    display_order: int
+
+
+class ContributorsPageConfig(BaseModel):
+    title: str = "Project Contributors"
+    subtitle: str = "The core developers, security researchers, and contributors powering TrustGuard AI."
+    header_banner_url: Optional[str] = None
+    is_published: bool = True
+    show_in_navigation: bool = True
+    updated_at: Optional[datetime] = None
+
+
+class ContributorsPageConfigUpdate(BaseModel):
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    header_banner_url: Optional[str] = None
+    is_published: Optional[bool] = None
+    show_in_navigation: Optional[bool] = None
+
+
+# -----------------------------------------------------------------------------
+# 11. Website Pages (CMS)
+# -----------------------------------------------------------------------------
+class WebsitePageItem(BaseModel):
+    id: str
+    title: str
+    slug: str
+    content: str
+    meta_description: Optional[str] = None
+    is_published: bool = True
+    show_in_navigation: bool = False
+    nav_order: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WebsitePageCreate(BaseModel):
+    title: str = Field(..., min_length=2, max_length=150)
+    slug: str = Field(..., min_length=2, max_length=100)
+    content: str
+    meta_description: Optional[str] = None
+    is_published: bool = True
+    show_in_navigation: bool = False
+    nav_order: int = 0
+
+
+class WebsitePageUpdate(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    content: Optional[str] = None
+    meta_description: Optional[str] = None
+    is_published: Optional[bool] = None
+    show_in_navigation: Optional[bool] = None
+    nav_order: Optional[int] = None
+
+
+# -----------------------------------------------------------------------------
+# 12. Website Scans Management
+# -----------------------------------------------------------------------------
+class AdminScanItem(BaseModel):
+    id: str
+    url: str
+    domain: Optional[str] = None
+    classification: str = "UNKNOWN"
+    trust_score: float = 0.0
+    is_malicious: bool = False
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    ip_address: Optional[str] = None
+    scanned_at: datetime
+    details: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedAdminScans(BaseModel):
+    items: List[AdminScanItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+# -----------------------------------------------------------------------------
+# 13. System Settings Configuration
+# -----------------------------------------------------------------------------
+class SystemSettingsConfig(BaseModel):
+    site_name: str = "TrustGuard AI"
+    site_tagline: str = "AI-Powered Phishing & Scam URL Detection"
+    site_description: str = "Next-generation URL threat intelligence and automated cyber fraud protection."
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    announcement_enabled: bool = False
+    announcement_message: Optional[str] = None
+    announcement_type: str = "info"  # info | warning | critical
+    announcement_link: Optional[str] = None
+    allow_registration: bool = True
+    allow_guest_scans: bool = True
+    allow_community_reports: bool = True
+    updated_at: Optional[datetime] = None
+
+
+class SystemSettingsUpdate(BaseModel):
+    site_name: Optional[str] = None
+    site_tagline: Optional[str] = None
+    site_description: Optional[str] = None
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    announcement_enabled: Optional[bool] = None
+    announcement_message: Optional[str] = None
+    announcement_type: Optional[str] = None
+    announcement_link: Optional[str] = None
+    allow_registration: Optional[bool] = None
+    allow_guest_scans: Optional[bool] = None
+    allow_community_reports: Optional[bool] = None
+
 

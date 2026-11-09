@@ -90,17 +90,32 @@ export const Footer: React.FC = () => {
           {/* Platform Governance & Access */}
           <div className="space-y-3">
             <span className="text-[11px] text-[#666666] uppercase tracking-wider font-semibold">
-              ACCESS
+              COMPANY & LEGAL
             </span>
             <ul className="space-y-2 text-[#A1A1A1]">
               <li>
-                <Link to="/login" className="hover:text-[#F5F5F5] transition-colors">
-                  Sign In
+                <Link to="/contributors" className="hover:text-[#F5F5F5] transition-colors">
+                  Contributors
                 </Link>
               </li>
               <li>
-                <Link to="/register" className="hover:text-[#F5F5F5] transition-colors">
-                  Register Account
+                <Link to="/p/about" className="hover:text-[#F5F5F5] transition-colors">
+                  About Us
+                </Link>
+              </li>
+              <li>
+                <Link to="/p/privacy" className="hover:text-[#F5F5F5] transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/p/terms" className="hover:text-[#F5F5F5] transition-colors">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link to="/admin/login" className="hover:text-[#F5F5F5] text-[#777777] transition-colors">
+                  Admin Console
                 </Link>
               </li>
             </ul>

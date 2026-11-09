@@ -7,7 +7,7 @@ export interface AdminUser {
   username: string;
   email?: string;
   full_name?: string;
-  role: 'super_admin' | 'security_analyst' | 'moderator';
+  role: 'super_admin' | 'admin' | 'content_manager' | 'security_analyst' | 'moderator';
   is_active: boolean;
   last_login_at?: string;
 }
@@ -29,6 +29,12 @@ export interface AdminDashboardStats {
   rejected_reports: number;
   resolved_reports: number;
   high_risk_urls: number;
+  safe_scans: number;
+  suspicious_scans: number;
+  malicious_scans: number;
+  total_contributors: number;
+  published_pages: number;
+  system_status: string;
   maintenance_enabled: boolean;
   maintenance_message?: string;
 }
@@ -229,3 +235,156 @@ export interface PaginatedAdminAuditLogs {
   page_size: number;
   total_pages: number;
 }
+
+// -----------------------------------------------------------------------------
+// Contributors Types
+// -----------------------------------------------------------------------------
+export interface ContributorSocialLinks {
+  github?: string;
+  linkedin?: string;
+  twitter?: string;
+  website?: string;
+}
+
+export interface Contributor {
+  id: string;
+  name: string;
+  role: string;
+  bio?: string;
+  avatar_url?: string;
+  social_links?: ContributorSocialLinks;
+  display_order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ContributorCreate {
+  name: string;
+  role: string;
+  bio?: string;
+  avatar_url?: string;
+  social_links?: ContributorSocialLinks;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface ContributorUpdate {
+  name?: string;
+  role?: string;
+  bio?: string;
+  avatar_url?: string;
+  social_links?: ContributorSocialLinks;
+  display_order?: number;
+  is_active?: boolean;
+}
+
+export interface ContributorReorderItem {
+  id: string;
+  display_order: number;
+}
+
+export interface ContributorsPageConfig {
+  title: string;
+  subtitle: string;
+  header_banner_url?: string;
+  is_published: boolean;
+  show_in_navigation: boolean;
+  updated_at?: string;
+}
+
+// -----------------------------------------------------------------------------
+// Website Pages (CMS) Types
+// -----------------------------------------------------------------------------
+export interface WebsitePage {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  meta_description?: string;
+  is_published: boolean;
+  show_in_navigation: boolean;
+  nav_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WebsitePageCreate {
+  title: string;
+  slug: string;
+  content: string;
+  meta_description?: string;
+  is_published: boolean;
+  show_in_navigation: boolean;
+  nav_order: number;
+}
+
+export interface WebsitePageUpdate {
+  title?: string;
+  slug?: string;
+  content?: string;
+  meta_description?: string;
+  is_published?: boolean;
+  show_in_navigation?: boolean;
+  nav_order?: number;
+}
+
+// -----------------------------------------------------------------------------
+// Scans Management Types
+// -----------------------------------------------------------------------------
+export interface AdminScanItem {
+  id: string;
+  url: string;
+  domain?: string;
+  classification: string;
+  trust_score: number;
+  is_malicious: boolean;
+  user_id?: string;
+  user_email?: string;
+  ip_address?: string;
+  scanned_at: string;
+  details?: Record<string, any>;
+}
+
+export interface PaginatedAdminScans {
+  items: AdminScanItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+// -----------------------------------------------------------------------------
+// System Settings Types
+// -----------------------------------------------------------------------------
+export interface SystemSettingsConfig {
+  site_name: string;
+  site_tagline: string;
+  site_description: string;
+  logo_url?: string;
+  favicon_url?: string;
+  announcement_enabled: boolean;
+  announcement_message?: string;
+  announcement_type: 'info' | 'warning' | 'critical';
+  announcement_link?: string;
+  allow_registration: boolean;
+  allow_guest_scans: boolean;
+  allow_community_reports: boolean;
+  updated_at?: string;
+}
+
+export interface SystemSettingsUpdate {
+  site_name?: string;
+  site_tagline?: string;
+  site_description?: string;
+  logo_url?: string;
+  favicon_url?: string;
+  announcement_enabled?: boolean;
+  announcement_message?: string;
+  announcement_type?: 'info' | 'warning' | 'critical';
+  announcement_link?: string;
+  allow_registration?: boolean;
+  allow_guest_scans?: boolean;
+  allow_community_reports?: boolean;
+}
+

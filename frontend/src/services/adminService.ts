@@ -10,11 +10,22 @@ import {
   AdminThreatIntelSummary,
   AdminUser,
   AdminUserDetail,
+  Contributor,
+  ContributorCreate,
+  ContributorReorderItem,
+  ContributorsPageConfig,
+  ContributorUpdate,
   MaintenanceConfig,
   PaginatedAdminAuditLogs,
   PaginatedAdminReports,
+  PaginatedAdminScans,
   PaginatedAdminUsers,
   SystemHealthResponse,
+  SystemSettingsConfig,
+  SystemSettingsUpdate,
+  WebsitePage,
+  WebsitePageCreate,
+  WebsitePageUpdate,
 } from '../types/admin';
 
 export const ADMIN_TOKEN_KEY = 'tg_admin_token';
@@ -122,6 +133,28 @@ export const adminService = {
 
   async restoreUser(userId: string, reason: string): Promise<void> {
     await adminApiClient.post(`/admin/users/${userId}/restore`, { is_active: true, reason });
+  },
+
+  async updateUser(
+    userId: string,
+    data: { full_name?: string; role?: string; is_active?: boolean }
+  ): Promise<AdminUserDetail> {
+    const res = await adminApiClient.patch<AdminUserDetail>(`/admin/users/${userId}`, data);
+    return res.data;
+  },
+
+  async updateUserEmail(userId: string, newEmail: string, reason?: string): Promise<AdminUserDetail> {
+    const res = await adminApiClient.post<AdminUserDetail>(`/admin/users/${userId}/email`, {
+      new_email: newEmail,
+      reason,
+    });
+    return res.data;
+  },
+
+  async deleteUser(userId: string, reason?: string): Promise<void> {
+    await adminApiClient.delete(`/admin/users/${userId}`, {
+      params: { reason },
+    });
   },
 
   // 4. Reports Moderation
@@ -233,6 +266,108 @@ export const adminService = {
         search: search || undefined,
       },
     });
+    return res.data;
+  },
+
+  // 9. Contributors Management
+  async getContributors(includeInactive: boolean = true): Promise<Contributor[]> {
+    const res = await adminApiClient.get<Contributor[]>('/admin/contributors', {
+      params: { include_inactive: includeInactive },
+    });
+    return res.data;
+  },
+
+  async getContributor(contributorId: string): Promise<Contributor> {
+    const res = await adminApiClient.get<Contributor>(`/admin/contributors/${contributorId}`);
+    return res.data;
+  },
+
+  async createContributor(data: ContributorCreate): Promise<Contributor> {
+    const res = await adminApiClient.post<Contributor>('/admin/contributors', data);
+    return res.data;
+  },
+
+  async updateContributor(contributorId: string, data: ContributorUpdate): Promise<Contributor> {
+    const res = await adminApiClient.put<Contributor>(`/admin/contributors/${contributorId}`, data);
+    return res.data;
+  },
+
+  async deleteContributor(contributorId: string): Promise<void> {
+    await adminApiClient.delete(`/admin/contributors/${contributorId}`);
+  },
+
+  async reorderContributors(items: ContributorReorderItem[]): Promise<void> {
+    await adminApiClient.post('/admin/contributors/reorder', items);
+  },
+
+  async getContributorsPageConfig(): Promise<ContributorsPageConfig> {
+    const res = await adminApiClient.get<ContributorsPageConfig>('/admin/contributors-page-config');
+    return res.data;
+  },
+
+  async updateContributorsPageConfig(data: Partial<ContributorsPageConfig>): Promise<ContributorsPageConfig> {
+    const res = await adminApiClient.put<ContributorsPageConfig>('/admin/contributors-page-config', data);
+    return res.data;
+  },
+
+  // 10. Dynamic Pages (CMS) Management
+  async getPages(includeUnpublished: boolean = true): Promise<WebsitePage[]> {
+    const res = await adminApiClient.get<WebsitePage[]>('/admin/pages', {
+      params: { include_unpublished: includeUnpublished },
+    });
+    return res.data;
+  },
+
+  async getPage(pageId: string): Promise<WebsitePage> {
+    const res = await adminApiClient.get<WebsitePage>(`/admin/pages/${pageId}`);
+    return res.data;
+  },
+
+  async createPage(data: WebsitePageCreate): Promise<WebsitePage> {
+    const res = await adminApiClient.post<WebsitePage>('/admin/pages', data);
+    return res.data;
+  },
+
+  async updatePage(pageId: string, data: WebsitePageUpdate): Promise<WebsitePage> {
+    const res = await adminApiClient.put<WebsitePage>(`/admin/pages/${pageId}`, data);
+    return res.data;
+  },
+
+  async deletePage(pageId: string): Promise<void> {
+    await adminApiClient.delete(`/admin/pages/${pageId}`);
+  },
+
+  // 11. Scans Management
+  async getScans(
+    page: number = 1,
+    pageSize: number = 20,
+    search?: string,
+    classification?: string
+  ): Promise<PaginatedAdminScans> {
+    const res = await adminApiClient.get<PaginatedAdminScans>('/admin/scans', {
+      params: {
+        page,
+        page_size: pageSize,
+        search: search || undefined,
+        classification: classification || undefined,
+      },
+    });
+    return res.data;
+  },
+
+  async getScanDetail(scanId: string): Promise<Record<string, any>> {
+    const res = await adminApiClient.get<Record<string, any>>(`/admin/scans/${scanId}`);
+    return res.data;
+  },
+
+  // 12. General System Settings
+  async getSystemSettings(): Promise<SystemSettingsConfig> {
+    const res = await adminApiClient.get<SystemSettingsConfig>('/admin/settings/general');
+    return res.data;
+  },
+
+  async updateSystemSettings(data: SystemSettingsUpdate): Promise<SystemSettingsConfig> {
+    const res = await adminApiClient.put<SystemSettingsConfig>('/admin/settings/general', data);
     return res.data;
   },
 };

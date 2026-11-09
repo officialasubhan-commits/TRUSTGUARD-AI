@@ -1,19 +1,52 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield, User as UserIcon, LogOut } from 'lucide-react';
 import { Container } from '../common/Container';
 import { useAuth } from '../../context/AuthContext';
+import { publicCmsService } from '../../services/publicCmsService';
 
 export const Navigation: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showContributors, setShowContributors] = useState(true);
+  const [announcement, setAnnouncement] = useState<{
+    enabled: boolean;
+    message?: string;
+    type?: string;
+    link?: string;
+  } | null>(null);
+
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
+
+  useEffect(() => {
+    publicCmsService
+      .getContributorsPageConfig()
+      .then((cfg) => {
+        setShowContributors(Boolean(cfg.show_in_navigation && cfg.is_published));
+      })
+      .catch(() => {});
+
+    publicCmsService
+      .getPublicSettings()
+      .then((s) => {
+        if (s.announcement_enabled && s.announcement_message) {
+          setAnnouncement({
+            enabled: true,
+            message: s.announcement_message,
+            type: s.announcement_type,
+            link: s.announcement_link,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const guestNavLinks = [
     { label: 'PRODUCT', href: '/scan' },
     { label: 'HOW IT WORKS', href: '/#how-it-works' },
     { label: 'SECURITY', href: '/#capabilities' },
     { label: 'COMMUNITY', href: '/community' },
+    ...(showContributors ? [{ label: 'CONTRIBUTORS', href: '/contributors' }] : []),
   ];
 
   const authNavLinks = [
@@ -21,6 +54,7 @@ export const Navigation: React.FC = () => {
     { label: 'DASHBOARD', href: '/dashboard' },
     { label: 'HISTORY', href: '/history' },
     { label: 'COMMUNITY', href: '/community' },
+    ...(showContributors ? [{ label: 'CONTRIBUTORS', href: '/contributors' }] : []),
   ];
 
   const activeLinks = isAuthenticated ? authNavLinks : guestNavLinks;
@@ -43,6 +77,24 @@ export const Navigation: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full bg-[#080808]/90 backdrop-blur-md border-b border-[#292929]">
+      {announcement?.enabled && announcement.message && (
+        <div
+          className={`py-1.5 px-4 text-center text-xs font-mono border-b ${
+            announcement.type === 'critical'
+              ? 'bg-rose-950/80 border-rose-800 text-rose-200'
+              : announcement.type === 'warning'
+              ? 'bg-amber-950/80 border-amber-800 text-amber-200'
+              : 'bg-cyan-950/80 border-cyan-800 text-cyan-200'
+          }`}
+        >
+          <span>{announcement.message}</span>
+          {announcement.link && (
+            <a href={announcement.link} className="ml-2 font-bold underline hover:opacity-80">
+              LEARN MORE &rarr;
+            </a>
+          )}
+        </div>
+      )}
       <Container size="xl">
         <div className="flex h-16 items-center justify-between">
           {/* Brand Mark & Wordmark */}
