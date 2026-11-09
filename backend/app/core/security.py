@@ -248,19 +248,38 @@ def verify_jwt_token(token: str) -> AuthenticatedUser:
     if not secret or secret.startswith("your-") or len(secret) < 32:
         secret = "trustguard-test-jwt-secret-key-32chars-minimum!"
 
-    try:
-        # Decode and verify token signature & expiration
-        # Note: Supabase tokens contain aud="authenticated"
-        payload = jwt.decode(
-            token,
-            secret,
-            algorithms=["HS256"],
-            options={"verify_signature": True, "verify_exp": True},
-            audience=["authenticated", "anon"],
-        )
-    except jwt.ExpiredSignatureError:
-        raise TokenExpiredError("Authentication token has expired. Please log in again.")
-    except jwt.PyJWTError as e:
+    # Supabase signs HMAC-SHA256 JWTs with the base64-decoded binary bytes of SUPABASE_JWT_SECRET.
+    # We test decoded binary bytes first, then fallback to literal string secret.
+    candidate_secrets = []
+    if secret:
+        try:
+            import base64
+            decoded_bytes = base64.b64decode(secret, validate=True)
+            if len(decoded_bytes) >= 32:
+                candidate_secrets.append(decoded_bytes)
+        except Exception:
+            pass
+        candidate_secrets.append(secret)
+
+    payload = None
+    decode_error = None
+    for cand in candidate_secrets:
+        try:
+            payload = jwt.decode(
+                token,
+                cand,
+                algorithms=["HS256"],
+                options={"verify_signature": True, "verify_exp": True},
+                audience=["authenticated", "anon"],
+            )
+            break
+        except jwt.ExpiredSignatureError:
+            raise TokenExpiredError("Authentication token has expired. Please log in again.")
+        except jwt.PyJWTError as err:
+            decode_error = err
+            continue
+
+    if payload is None:
         # In test / dev environments, check if the client can verify via Supabase Auth API
         from app.database import connection
 
@@ -289,7 +308,7 @@ def verify_jwt_token(token: str) -> AuthenticatedUser:
             except Exception as sb_err:
                 log.warning("Supabase get_user verification failed: %s", sb_err)
 
-        log.warning("JWT verification error: %s", e)
+        log.warning("JWT verification error: %s", decode_error)
         raise InvalidTokenError("Invalid authentication token.")
 
     # Validate subject (User UUID)

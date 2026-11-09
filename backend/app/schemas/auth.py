@@ -12,6 +12,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.schemas.user import UserProfileResponse
+
 
 class UserRegisterRequest(BaseModel):
     """Client request schema for registering a new user."""
@@ -132,6 +134,7 @@ class AuthTokenResponse(BaseModel):
     expires_in: int = Field(default=3600, description="Token validity in seconds")
     refresh_token: Optional[str] = Field(None, description="Supabase refresh token")
     user: AuthUserResponse = Field(..., description="User identity information")
+    profile: Optional[UserProfileResponse] = Field(None, description="Complete user profile record")
 
 
 class AuthMessageResponse(BaseModel):

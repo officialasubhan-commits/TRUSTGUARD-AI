@@ -42,6 +42,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Guest mode (no token) also renders immediately
   // Only wait if a token exists without any cached user identity
   const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/auth/callback')) {
+      return false;
+    }
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     const storedUser = localStorage.getItem(USER_STORAGE_KEY);
     return !!token && !storedUser;
@@ -96,6 +99,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
+      // Do not run background session restoration while processing the OAuth callback route
+      if (typeof window !== 'undefined' && window.location.pathname.includes('/auth/callback')) {
+        setIsLoading(false);
+        return;
+      }
+
       const token = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (token) {
         await refreshProfile();
@@ -117,8 +126,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      // Instant preliminary profile to prevent skeleton lag
-      const defaultProfile: UserProfile = {
+      // Instant profile: Use backend-provided profile if available, otherwise default
+      const userProfile: UserProfile = session.profile || {
         id: session.user.id,
         email: session.user.email,
         full_name: session.user.full_name || null,
@@ -126,20 +135,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         scan_count: 0,
         is_active: true,
         threat_digest_enabled: false,
-        created_at: new Date().toISOString(),
+        created_at: session.user.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      setProfile(defaultProfile);
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+      setProfile(userProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
 
-      // Asynchronously fetch complete profile in background without blocking navigation
-      authService
-        .getUserProfile()
-        .then((profileData) => {
-          setProfile(profileData);
-          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
-        })
-        .catch(() => {});
+      // Only fetch if backend didn't supply complete profile
+      if (!session.profile) {
+        authService
+          .getUserProfile()
+          .then((profileData) => {
+            setProfile(profileData);
+            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+          })
+          .catch(() => {});
+      }
     } finally {
       setIsLoading(false);
     }
@@ -156,8 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      // Instant preliminary profile
-      const defaultProfile: UserProfile = {
+      const userProfile: UserProfile = session.profile || {
         id: session.user.id,
         email: session.user.email,
         full_name: session.user.full_name || null,
@@ -165,19 +175,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         scan_count: 0,
         is_active: true,
         threat_digest_enabled: false,
-        created_at: new Date().toISOString(),
+        created_at: session.user.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      setProfile(defaultProfile);
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+      setProfile(userProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
 
-      authService
-        .getUserProfile()
-        .then((profileData) => {
-          setProfile(profileData);
-          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
-        })
-        .catch(() => {});
+      if (!session.profile) {
+        authService
+          .getUserProfile()
+          .then((profileData) => {
+            setProfile(profileData);
+            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+          })
+          .catch(() => {});
+      }
     } finally {
       setIsLoading(false);
     }
@@ -186,6 +198,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = useCallback(async (redirectTo?: string) => {
     setIsLoading(true);
     try {
+      // Purge prior stale session state before initiating OAuth handshake
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(PROFILE_STORAGE_KEY);
+      setUser(null);
+      setProfile(null);
+
       const res = await authService.getGoogleOAuthUrl(redirectTo);
       if (res?.url) {
         window.location.href = res.url;
@@ -208,7 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      const defaultProfile: UserProfile = {
+      const userProfile: UserProfile = session.profile || {
         id: session.user.id,
         email: session.user.email,
         full_name: session.user.full_name || null,
@@ -216,19 +236,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         scan_count: 0,
         is_active: true,
         threat_digest_enabled: false,
-        created_at: new Date().toISOString(),
+        created_at: session.user.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      setProfile(defaultProfile);
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+      setProfile(userProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
 
-      authService
-        .getUserProfile()
-        .then((profileData) => {
-          setProfile(profileData);
-          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
-        })
-        .catch(() => {});
+      if (!session.profile) {
+        authService
+          .getUserProfile()
+          .then((profileData) => {
+            setProfile(profileData);
+            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+          })
+          .catch(() => {});
+      }
     } finally {
       setIsLoading(false);
     }

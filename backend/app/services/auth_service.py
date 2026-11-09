@@ -7,6 +7,7 @@ Integrates directly with Supabase Auth and synchronises user profiles.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -112,8 +113,9 @@ class AuthService:
 
                 user_id = uuid.UUID(sb_user.id)
                 # Create profile record in public.users
+                profile = None
                 try:
-                    await self._user_repo.create_user_profile(
+                    profile = await self._user_repo.create_user_profile(
                         UserCreate(
                             id=user_id,
                             email=email,
@@ -122,6 +124,7 @@ class AuthService:
                     )
                 except DatabaseError as e:
                     logger.warning("Profile creation error (may be handled by trigger): %s", e)
+                    profile = await self._user_repo.get_user_profile(user_id)
 
                 # Acquire immediate session tokens via password login since user is confirmed
                 session = None
@@ -154,6 +157,12 @@ class AuthService:
                         "created_at": datetime.now(timezone.utc),
                     }
 
+                from app.core.security import _verified_token_cache, AuthenticatedUser
+                _verified_token_cache[access_token] = (
+                    time.time() + 300,
+                    AuthenticatedUser(user_id=user_id, email=email, role="user", token=access_token),
+                )
+
                 return AuthTokenResponse(
                     access_token=access_token,
                     refresh_token=refresh_token,
@@ -165,6 +174,7 @@ class AuthService:
                         role="user",
                         created_at=datetime.now(timezone.utc),
                     ),
+                    profile=profile,
                 )
             except UserAlreadyExistsError:
                 raise
@@ -248,6 +258,21 @@ class AuthService:
                     else "user"
                 )
 
+                profile = await self._user_repo.get_user_profile(user_id)
+                display_name = profile.full_name if profile and profile.full_name else full_name
+                display_avatar = profile.avatar_url if profile and profile.avatar_url else None
+
+                from app.core.security import _verified_token_cache, AuthenticatedUser
+                _verified_token_cache[session.access_token] = (
+                    time.time() + 300,
+                    AuthenticatedUser(
+                        user_id=user_id,
+                        email=email,
+                        role=str(user_role),
+                        token=session.access_token,
+                    ),
+                )
+
                 return AuthTokenResponse(
                     access_token=session.access_token,
                     refresh_token=session.refresh_token,
@@ -255,10 +280,12 @@ class AuthService:
                     user=AuthUserResponse(
                         id=user_id,
                         email=email,
-                        full_name=full_name,
+                        full_name=display_name,
+                        avatar_url=display_avatar,
                         role=str(user_role),
                         created_at=datetime.now(timezone.utc),
                     ),
+                    profile=profile,
                 )
             except (InvalidCredentialsError, RateLimitExceededError):
                 raise
@@ -302,6 +329,21 @@ class AuthService:
                                         if hasattr(sb_user, "app_metadata") and sb_user.app_metadata
                                         else "user"
                                     )
+                                    profile = await self._user_repo.get_user_profile(user_id)
+                                    display_name = profile.full_name if profile and profile.full_name else full_name
+                                    display_avatar = profile.avatar_url if profile and profile.avatar_url else None
+
+                                    from app.core.security import _verified_token_cache, AuthenticatedUser
+                                    _verified_token_cache[session.access_token] = (
+                                        time.time() + 300,
+                                        AuthenticatedUser(
+                                            user_id=user_id,
+                                            email=email,
+                                            role=str(user_role),
+                                            token=session.access_token,
+                                        ),
+                                    )
+
                                     return AuthTokenResponse(
                                         access_token=session.access_token,
                                         refresh_token=session.refresh_token,
@@ -309,10 +351,12 @@ class AuthService:
                                         user=AuthUserResponse(
                                             id=user_id,
                                             email=email,
-                                            full_name=full_name,
+                                            full_name=display_name,
+                                            avatar_url=display_avatar,
                                             role=str(user_role),
                                             created_at=datetime.now(timezone.utc),
                                         ),
+                                        profile=profile,
                                     )
                     except Exception as rescue_err:
                         logger.warning("Unconfirmed email rescue login failed: %s", rescue_err)
@@ -545,8 +589,26 @@ class AuthService:
         if access_token == "dev-google-mock-token":
             user_id = uuid.uuid4()
             email = "google_user@trustguard.ai"
+            token = _generate_mock_jwt(user_id, email)
+            profile = await self._user_repo.get_user_profile(user_id)
+            if not profile:
+                try:
+                    profile = await self._user_repo.create_user_profile(
+                        UserCreate(
+                            id=user_id,
+                            email=email,
+                            full_name="Google Analyst (Dev)",
+                        )
+                    )
+                except Exception:
+                    pass
+            from app.core.security import _verified_token_cache, AuthenticatedUser
+            _verified_token_cache[token] = (
+                time.time() + 300,
+                AuthenticatedUser(user_id=user_id, email=email, role="user", token=token),
+            )
             return AuthTokenResponse(
-                access_token=_generate_mock_jwt(user_id, email),
+                access_token=token,
                 refresh_token=str(uuid.uuid4()),
                 expires_in=3600,
                 user=AuthUserResponse(
@@ -556,6 +618,7 @@ class AuthService:
                     role="user",
                     created_at=datetime.now(timezone.utc),
                 ),
+                profile=profile,
             )
 
         if self._client is not None and settings.supabase_configured:
@@ -599,7 +662,7 @@ class AuthService:
                 profile = await self._user_repo.get_user_profile(user_id)
                 if not profile:
                     try:
-                        await self._user_repo.create_user_profile(
+                        profile = await self._user_repo.create_user_profile(
                             UserCreate(
                                 id=user_id,
                                 email=email,
@@ -609,6 +672,7 @@ class AuthService:
                         )
                     except Exception as p_err:
                         logger.warning("Profile creation error on OAuth callback: %s", p_err)
+                        profile = await self._user_repo.get_user_profile(user_id)
 
                 # Preserve existing roles, default to user, never auto-grant admin
                 active_role = "user"
@@ -617,6 +681,21 @@ class AuthService:
                 elif sb_user.app_metadata and sb_user.app_metadata.get("role"):
                     active_role = sb_user.app_metadata.get("role")
 
+                display_name = profile.full_name if profile and profile.full_name else full_name
+                display_avatar = profile.avatar_url if profile and profile.avatar_url else avatar_url
+
+                # Pre-warm local token cache to eliminate latency for subsequent API requests
+                from app.core.security import _verified_token_cache, AuthenticatedUser
+                _verified_token_cache[session.access_token] = (
+                    time.time() + 300,
+                    AuthenticatedUser(
+                        user_id=user_id,
+                        email=email,
+                        role=active_role,
+                        token=session.access_token,
+                    ),
+                )
+
                 return AuthTokenResponse(
                     access_token=session.access_token,
                     refresh_token=session.refresh_token,
@@ -624,12 +703,13 @@ class AuthService:
                     user=AuthUserResponse(
                         id=user_id,
                         email=email,
-                        full_name=full_name,
-                        avatar_url=avatar_url,
+                        full_name=display_name,
+                        avatar_url=display_avatar,
                         role=active_role,
                         email_confirmed_at=datetime.now(timezone.utc),
                         created_at=datetime.now(timezone.utc),
                     ),
+                    profile=profile,
                 )
             except Exception as e:
                 logger.error("Supabase OAuth callback error: %s", e)
@@ -638,8 +718,26 @@ class AuthService:
         # Local test fallback
         user_id = uuid.uuid4()
         email = "google_user@trustguard.ai"
+        token = _generate_mock_jwt(user_id, email)
+        profile = await self._user_repo.get_user_profile(user_id)
+        if not profile:
+            try:
+                profile = await self._user_repo.create_user_profile(
+                    UserCreate(
+                        id=user_id,
+                        email=email,
+                        full_name="Google Analyst",
+                    )
+                )
+            except Exception:
+                pass
+        from app.core.security import _verified_token_cache, AuthenticatedUser
+        _verified_token_cache[token] = (
+            time.time() + 300,
+            AuthenticatedUser(user_id=user_id, email=email, role="user", token=token),
+        )
         return AuthTokenResponse(
-            access_token=_generate_mock_jwt(user_id, email),
+            access_token=token,
             refresh_token=str(uuid.uuid4()),
             expires_in=3600,
             user=AuthUserResponse(
@@ -649,4 +747,5 @@ class AuthService:
                 role="user",
                 created_at=datetime.now(timezone.utc),
             ),
+            profile=profile,
         )

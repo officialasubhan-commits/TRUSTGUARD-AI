@@ -14,6 +14,7 @@ export interface AuthSession {
   token_type: string;
   expires_in: number;
   user: User;
+  profile?: UserProfile | null;
 }
 
 export interface UserProfile {
