@@ -14,14 +14,27 @@ import { Skeleton } from '../common/Skeleton';
 import { scanService } from '../../services/scanService';
 import { DailyScanActivity } from '../../types/scan';
 
+// High-performance timeline cache to prevent layout jumps on navigation
+const timelineCache = new Map<number, { data: DailyScanActivity[]; timestamp: number }>();
+const TIMELINE_CACHE_TTL_MS = 60000; // 60 seconds
+
 interface ActivityChartProps {
   onTotalScansCalculated?: (total: number) => void;
 }
 
 export const ActivityChart: React.FC<ActivityChartProps> = () => {
   const [days, setDays] = useState<7 | 30 | 90>(30);
-  const [timeline, setTimeline] = useState<DailyScanActivity[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [timeline, setTimeline] = useState<DailyScanActivity[]>(() => {
+    const cached = timelineCache.get(30);
+    if (cached && Date.now() - cached.timestamp < TIMELINE_CACHE_TTL_MS) {
+      return cached.data;
+    }
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const cached = timelineCache.get(30);
+    return !cached || Date.now() - cached.timestamp >= TIMELINE_CACHE_TTL_MS;
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,15 +42,25 @@ export const ActivityChart: React.FC<ActivityChartProps> = () => {
     const controller = new AbortController();
 
     const fetchTimeline = async () => {
-      setIsLoading(true);
+      const cached = timelineCache.get(days);
+      const isFresh = cached && Date.now() - cached.timestamp < TIMELINE_CACHE_TTL_MS;
+
+      if (cached) {
+        setTimeline(cached.data);
+      }
+      if (!isFresh) {
+        setIsLoading(!cached);
+      }
       setError(null);
+
       try {
         const data = await scanService.getActivityTimeline(days, controller.signal);
         if (isMounted) {
+          timelineCache.set(days, { data, timestamp: Date.now() });
           setTimeline(data);
         }
       } catch (err: any) {
-        if (!controller.signal.aborted && isMounted) {
+        if (!controller.signal.aborted && isMounted && !cached) {
           setError('Unable to load scan activity timeline.');
         }
       } finally {

@@ -14,6 +14,7 @@ import {
   TOKEN_STORAGE_KEY,
   REFRESH_TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
+  PROFILE_STORAGE_KEY,
 } from '../services';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,12 +29,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    try {
+      const stored = localStorage.getItem(PROFILE_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Fast initialization: If credentials exist in local storage, render immediately (< 5ms)
+  // Guest mode (no token) also renders immediately
+  // Only wait if a token exists without any cached user identity
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+    return !!token && !storedUser;
+  });
 
   const isAuthenticated = useMemo(() => !!user && !!localStorage.getItem(TOKEN_STORAGE_KEY), [user]);
 
-  // Synchronize authenticated identity and profile on mount
+  // Synchronize authenticated identity and profile on mount (Stale-While-Revalidate)
   const refreshProfile = useCallback(async () => {
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) {
@@ -44,8 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const [userData, profileData] = await Promise.all([
-        authService.getMe().catch(() => null),
-        authService.getUserProfile().catch(() => null),
+        authService.getMe().catch((err) => {
+          if (err?.status === 401 || err?.response?.status === 401) throw err;
+          return null;
+        }),
+        authService.getUserProfile().catch((err) => {
+          if (err?.status === 401 || err?.response?.status === 401) throw err;
+          return null;
+        }),
       ]);
 
       if (userData) {
@@ -55,15 +77,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (profileData) {
         setProfile(profileData);
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
       }
-    } catch (err) {
-      console.warn('Session verification failed:', err);
-      // If unauthorized, clean up
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-      localStorage.removeItem(USER_STORAGE_KEY);
-      setUser(null);
-      setProfile(null);
+    } catch (err: any) {
+      if (err?.status === 401 || err?.response?.status === 401) {
+        console.warn('Session verification failed (401 Unauthorized), clearing session.');
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(USER_STORAGE_KEY);
+        localStorage.removeItem(PROFILE_STORAGE_KEY);
+        setUser(null);
+        setProfile(null);
+      } else {
+        console.warn('Background profile refresh deferred:', err);
+      }
     }
   }, []);
 
@@ -90,13 +117,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      // Fetch accompanying user profile record
-      try {
-        const profileData = await authService.getUserProfile();
-        setProfile(profileData);
-      } catch {
-        // Fallback profile if profile row creation is pending
-      }
+      // Instant preliminary profile to prevent skeleton lag
+      const defaultProfile: UserProfile = {
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.full_name || null,
+        avatar_url: session.user.avatar_url || null,
+        scan_count: 0,
+        is_active: true,
+        threat_digest_enabled: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setProfile(defaultProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+
+      // Asynchronously fetch complete profile in background without blocking navigation
+      authService
+        .getUserProfile()
+        .then((profileData) => {
+          setProfile(profileData);
+          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+        })
+        .catch(() => {});
     } finally {
       setIsLoading(false);
     }
@@ -113,12 +156,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      try {
-        const profileData = await authService.getUserProfile();
-        setProfile(profileData);
-      } catch {
-        // Profile row pending
-      }
+      // Instant preliminary profile
+      const defaultProfile: UserProfile = {
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.full_name || null,
+        avatar_url: session.user.avatar_url || null,
+        scan_count: 0,
+        is_active: true,
+        threat_digest_enabled: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setProfile(defaultProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+
+      authService
+        .getUserProfile()
+        .then((profileData) => {
+          setProfile(profileData);
+          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+        })
+        .catch(() => {});
     } finally {
       setIsLoading(false);
     }
@@ -149,12 +208,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
       setUser(session.user);
 
-      try {
-        const profileData = await authService.getUserProfile();
-        setProfile(profileData);
-      } catch {
-        // Fallback profile if profile row creation is pending
-      }
+      const defaultProfile: UserProfile = {
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.full_name || null,
+        avatar_url: session.user.avatar_url || null,
+        scan_count: 0,
+        is_active: true,
+        threat_digest_enabled: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setProfile(defaultProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(defaultProfile));
+
+      authService
+        .getUserProfile()
+        .then((profileData) => {
+          setProfile(profileData);
+          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileData));
+        })
+        .catch(() => {});
     } finally {
       setIsLoading(false);
     }
@@ -173,6 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(PROFILE_STORAGE_KEY);
       setUser(null);
       setProfile(null);
       setIsLoading(false);
@@ -192,6 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateProfile = useCallback(async (payload: UserUpdatePayload): Promise<UserProfile> => {
     const updated = await authService.updateUserProfile(payload);
     setProfile(updated);
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
     if (user) {
       const updatedUser: User = {
         ...user,

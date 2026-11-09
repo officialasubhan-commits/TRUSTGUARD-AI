@@ -37,6 +37,54 @@ logger = logging.getLogger("trustguard.repo.scan")
 _mock_scans_store: Dict[uuid.UUID, Dict[str, Any]] = {}
 _mock_results_store: Dict[uuid.UUID, Dict[str, Any]] = {}
 
+# High-performance TTL cache for user statistics and activity timeline
+_user_stats_cache: Dict[str, Tuple[ScanStatisticsResponse, float]] = {}
+_user_timeline_cache: Dict[str, Tuple[List[DailyScanActivity], float]] = {}
+_SCAN_STATS_CACHE_TTL_SECONDS = 30.0
+
+
+def _get_cached_stats(user_id: uuid.UUID) -> Optional[ScanStatisticsResponse]:
+    cached = _user_stats_cache.get(str(user_id))
+    if cached is not None:
+        stats, ts = cached
+        if (time.time() - ts) < _SCAN_STATS_CACHE_TTL_SECONDS:
+            return stats.model_copy()
+        _user_stats_cache.pop(str(user_id), None)
+    return None
+
+
+def _set_cached_stats(user_id: uuid.UUID, stats: ScanStatisticsResponse) -> None:
+    _user_stats_cache[str(user_id)] = (stats.model_copy(), time.time())
+
+
+def _get_cached_timeline(user_id: uuid.UUID, days: int) -> Optional[List[DailyScanActivity]]:
+    key = f"{user_id}:{days}"
+    cached = _user_timeline_cache.get(key)
+    if cached is not None:
+        timeline, ts = cached
+        if (time.time() - ts) < _SCAN_STATS_CACHE_TTL_SECONDS:
+            return [t.model_copy() for t in timeline]
+        _user_timeline_cache.pop(key, None)
+    return None
+
+
+def _set_cached_timeline(user_id: uuid.UUID, days: int, timeline: List[DailyScanActivity]) -> None:
+    key = f"{user_id}:{days}"
+    _user_timeline_cache[key] = ([t.model_copy() for t in timeline], time.time())
+
+
+def _invalidate_scan_cache(user_id: Optional[uuid.UUID] = None) -> None:
+    if user_id:
+        u_str = str(user_id)
+        _user_stats_cache.pop(u_str, None)
+        keys_to_del = [k for k in _user_timeline_cache if k.startswith(f"{u_str}:")]
+        for k in keys_to_del:
+            _user_timeline_cache.pop(k, None)
+    else:
+        _user_stats_cache.clear()
+        _user_timeline_cache.clear()
+
+
 
 def _normalize_db_risk_level(level: Optional[str]) -> str:
     """
@@ -122,6 +170,9 @@ class ScanRepository:
             "completed_at": None,
         }
 
+        if user_id:
+            _invalidate_scan_cache(user_id)
+
         cli = self.client
         if cli is not None:
             try:
@@ -184,6 +235,8 @@ class ScanRepository:
             updates["completed_at"] = status_update.completed_at.isoformat()
         elif status_update.scan_status in ("complete", "error"):
             updates["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+        _invalidate_scan_cache()
 
         cli = self.client
         if cli is not None:
@@ -718,6 +771,7 @@ class ScanRepository:
                 cli.table("scan_history").delete().eq("id", str(scan_id)).eq(
                     "user_id", str(requesting_user_id)
                 ).execute()
+                _invalidate_scan_cache(requesting_user_id)
                 return True
             except (ScanNotFoundError, ForbiddenError):
                 raise
@@ -750,6 +804,7 @@ class ScanRepository:
         for tid in threats_to_del:
             del _mock_threats_store[tid]
 
+        _invalidate_scan_cache(requesting_user_id)
         return True
 
     async def get_user_scan_statistics(
@@ -760,13 +815,21 @@ class ScanRepository:
         Computes aggregated security statistics for an authenticated user.
         Excludes guest scans and unauthorized records.
         """
+        cached = _get_cached_stats(user_id)
+        if cached is not None:
+            return cached
+
         all_scans: List[Dict[str, Any]] = []
         cli = self.client
         if cli is not None:
             try:
                 res = (
                     cli.table("scan_history")
-                    .select("*")
+                    .select(
+                        "id,submitted_url,normalized_url,domain,scan_status,risk_level,"
+                        "trust_score,risk_score,assessment_status,assessment_coverage,"
+                        "scoring_version,created_at,completed_at"
+                    )
                     .eq("user_id", str(user_id))
                     .eq("is_guest", False)
                     .order("created_at", desc=True)
@@ -838,7 +901,7 @@ class ScanRepository:
         )
         recent_summaries = [self._map_to_summary(s) for s in all_scans[:5]]
 
-        return ScanStatisticsResponse(
+        stats_resp = ScanStatisticsResponse(
             total_scans=total_scans,
             low_risk_scans=low_risk,
             moderate_risk_scans=moderate_risk,
@@ -849,6 +912,8 @@ class ScanRepository:
             recent_scans=recent_summaries,
             generated_at=datetime.now(timezone.utc),
         )
+        _set_cached_stats(user_id, stats_resp)
+        return stats_resp
 
     async def get_user_activity_timeline(
         self,
@@ -859,6 +924,10 @@ class ScanRepository:
         Aggregates daily scan counts and threat distributions across the specified historical window.
         Continuous calendar dates are populated with 0 counts if no scans took place.
         """
+        cached = _get_cached_timeline(user_id, days)
+        if cached is not None:
+            return cached
+
         days = max(1, min(90, days))
         now = datetime.now(timezone.utc)
         start_date = now - timedelta(days=days - 1)
@@ -929,7 +998,7 @@ class ScanRepository:
                 elif risk in ("MEDIUM", "MODERATE", "MODERATE_RISK"):
                     daily_buckets[day_key]["moderate_count"] += 1
 
-        return [
+        timeline_res = [
             DailyScanActivity(
                 date=k,
                 scan_count=v["scan_count"],
@@ -939,6 +1008,8 @@ class ScanRepository:
             )
             for k, v in sorted(daily_buckets.items())
         ]
+        _set_cached_timeline(user_id, days, timeline_res)
+        return timeline_res
 
     # ---------------------------------------------------------------------- #
     # Static Data Formatting & Query Helpers                                 #

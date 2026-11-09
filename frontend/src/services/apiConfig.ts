@@ -25,6 +25,7 @@ export const API_TIMEOUT: number = 30000; // 30 seconds for deep multi-engine se
 export const TOKEN_STORAGE_KEY = 'trustguard_access_token';
 export const REFRESH_TOKEN_STORAGE_KEY = 'trustguard_refresh_token';
 export const USER_STORAGE_KEY = 'trustguard_user';
+export const PROFILE_STORAGE_KEY = 'trustguard_user_profile';
 
 export const API_ENDPOINTS = {
   HEALTH: '/health',
