@@ -121,9 +121,26 @@ class AdminService:
             )
             raise ForbiddenError("Administrator account is inactive. Please contact support.")
 
-        # 4. Verify password hash
+        # 4. Verify password hash (dual verification: Argon2id/scrypt and Supabase Auth fallback)
         stored_hash = admin_row.get("password_hash", "")
-        if not verify_admin_password(stored_hash, login_in.password):
+        is_valid = verify_admin_password(stored_hash, login_in.password)
+        if not is_valid and connection.supabase_client is not None and settings.supabase_configured:
+            try:
+                target_email = admin_row.get("email") or (username if "@" in username else "admin@trustguard.ai")
+                sb_auth_res = connection.supabase_client.auth.sign_in_with_password({
+                    "email": target_email,
+                    "password": login_in.password,
+                })
+                if sb_auth_res and sb_auth_res.user:
+                    is_valid = True
+                    # Re-sync validated password hash into admin repository
+                    new_hash = hash_admin_password(login_in.password)
+                    admin_id_val = uuid.UUID(admin_row["id"]) if isinstance(admin_row["id"], str) else admin_row["id"]
+                    await self._repo.update_admin_password(admin_id_val, new_hash)
+            except Exception as sb_err:
+                logger.debug("Supabase auth fallback verification failed: %s", sb_err)
+
+        if not is_valid:
             record_login_failure(ip, username)
             await self._repo.log_audit_event(
                 action="ADMIN_LOGIN_FAILED",

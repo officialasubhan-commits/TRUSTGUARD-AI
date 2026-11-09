@@ -73,7 +73,7 @@ export const AdminLoginPage: React.FC = () => {
             {/* Username Input */}
             <div className="space-y-1.5">
               <label className="block text-xs font-mono text-[#A1A1A1] uppercase tracking-wider">
-                Admin Username
+                Admin Username or Email
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-[#555555] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -82,7 +82,7 @@ export const AdminLoginPage: React.FC = () => {
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="admin or admin@trustguard.ai"
                   className="w-full bg-[#141414] border border-[#282828] focus:border-white rounded px-9 py-2.5 text-sm text-white placeholder-[#555555] font-mono focus:outline-none transition-colors"
                   required
                 />

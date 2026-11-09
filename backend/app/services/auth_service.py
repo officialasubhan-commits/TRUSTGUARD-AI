@@ -242,6 +242,11 @@ class AuthService:
                 full_name = (
                     sb_user.user_metadata.get("full_name") if sb_user.user_metadata else None
                 )
+                user_role = (
+                    sb_user.app_metadata.get("role", "user")
+                    if hasattr(sb_user, "app_metadata") and sb_user.app_metadata
+                    else "user"
+                )
 
                 return AuthTokenResponse(
                     access_token=session.access_token,
@@ -251,7 +256,7 @@ class AuthService:
                         id=user_id,
                         email=email,
                         full_name=full_name,
-                        role="user",
+                        role=str(user_role),
                         created_at=datetime.now(timezone.utc),
                     ),
                 )
@@ -292,6 +297,11 @@ class AuthService:
                                         if sb_user.user_metadata
                                         else None
                                     )
+                                    user_role = (
+                                        sb_user.app_metadata.get("role", "user")
+                                        if hasattr(sb_user, "app_metadata") and sb_user.app_metadata
+                                        else "user"
+                                    )
                                     return AuthTokenResponse(
                                         access_token=session.access_token,
                                         refresh_token=session.refresh_token,
@@ -300,7 +310,7 @@ class AuthService:
                                             id=user_id,
                                             email=email,
                                             full_name=full_name,
-                                            role="user",
+                                            role=str(user_role),
                                             created_at=datetime.now(timezone.utc),
                                         ),
                                     )

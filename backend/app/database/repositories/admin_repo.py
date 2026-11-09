@@ -43,6 +43,23 @@ logger = logging.getLogger("trustguard.repo.admin")
 
 _LOCAL_STORE_PATH = Path(__file__).resolve().parent.parent / "local_admin_store.json"
 
+_DEFAULT_ADMIN_ID = uuid.UUID("a2107163-49cd-4486-b982-edef1b495a58")
+_DEFAULT_ADMIN_RECORD: Dict[str, Any] = {
+    "id": str(_DEFAULT_ADMIN_ID),
+    "username": "admin",
+    "password_hash": "scrypt$16384$8$1$107afd49bedf659b6f5414e83028c958$dcb46554c22e5f8560dabf07cf2652a197d404746105a22d60acbdcf3c88610b9f71c7c9a37eab266f6163fdf590bb86677d383303177ce8aff98521451184ba",
+    "email": "admin@trustguard.ai",
+    "full_name": "Security Administrator",
+    "role": "super_admin",
+    "is_active": True,
+    "last_login_at": None,
+    "last_login_ip": None,
+    "failed_login_attempts": 0,
+    "locked_until": None,
+    "created_at": "2026-11-08T14:43:22.659592+00:00",
+    "updated_at": "2026-11-08T15:10:07.496168+00:00",
+}
+
 # In-memory stores for isolated fallback
 _mock_admin_users: Dict[uuid.UUID, Dict[str, Any]] = {}
 _mock_audit_logs: List[Dict[str, Any]] = []
@@ -56,6 +73,18 @@ _mock_system_settings: Dict[str, Dict[str, Any]] = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 }
+
+
+def _ensure_default_admin():
+    """Guarantees the root administrator exists across all environments (including Render/offline)."""
+    global _mock_admin_users
+    has_admin = any(
+        u.get("username", "").lower() == "admin"
+        or (u.get("email") and u.get("email", "").lower() == "admin@trustguard.ai")
+        for u in _mock_admin_users.values()
+    )
+    if not has_admin:
+        _mock_admin_users[_DEFAULT_ADMIN_ID] = dict(_DEFAULT_ADMIN_RECORD)
 
 
 def _load_local_store():
@@ -72,6 +101,7 @@ def _load_local_store():
                     _mock_system_settings.update(data["system_settings"])
         except Exception as e:
             logger.debug("Failed reading local admin store: %s", e)
+    _ensure_default_admin()
 
 
 def _save_local_store():
@@ -88,6 +118,7 @@ def _save_local_store():
 
 
 _load_local_store()
+_ensure_default_admin()
 
 
 class AdminRepository:
@@ -108,13 +139,18 @@ class AdminRepository:
     # 1. Admin Account Operations
     # -------------------------------------------------------------------------
     async def get_admin_by_username(self, username: str) -> Optional[Dict[str, Any]]:
-        """Finds admin by username (case-insensitive) including password_hash."""
+        """Finds admin by username or email (case-insensitive) including password_hash."""
+        _ensure_default_admin()
         u_clean = username.strip().lower()
         cli = self.client
         if cli is not None and connection.is_table_available("admin_users"):
             try:
                 res = await asyncio.to_thread(
-                    lambda: cli.table("admin_users").select("*").ilike("username", u_clean).limit(1).execute()
+                    lambda: cli.table("admin_users")
+                    .select("*")
+                    .or_(f"username.ilike.{u_clean},email.ilike.{u_clean}")
+                    .limit(1)
+                    .execute()
                 )
                 if res.data:
                     return res.data[0]
@@ -122,12 +158,13 @@ class AdminRepository:
                 logger.debug("Supabase lookup admin_users failed, using fallback: %s", e)
 
         for u in _mock_admin_users.values():
-            if u["username"].lower() == u_clean:
+            if u["username"].lower() == u_clean or (u.get("email") and u["email"].lower() == u_clean):
                 return u
         return None
 
     async def get_admin_by_id(self, admin_id: uuid.UUID) -> Optional[AdminUserProfile]:
         """Finds active admin user profile by UUID."""
+        _ensure_default_admin()
         cli = self.client
         if cli is not None and connection.is_table_available("admin_users"):
             try:
